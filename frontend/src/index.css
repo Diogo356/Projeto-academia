@@ -1,0 +1,15 @@
+/* src/index.css */
+@import "tailwindcss";
+
+/* Estilos personalizados (agora funcionam!) */
+.timer-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.workout-card {
+  transition: all 0.3s ease;
+}
+
+.workout-card:hover {
+  transform: translateY(-5px);
+}
