@@ -1,7 +1,7 @@
 // src/components/admin/ExerciseList.jsx
 import React from 'react';
 
-const ExerciseList = ({ exercises, onEdit, onRemove, errors }) => {
+const ExerciseList = ({ exercises = [], onEdit, onRemove, errors = {}, disabled = false }) => {
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -22,7 +22,7 @@ const ExerciseList = ({ exercises, onEdit, onRemove, errors }) => {
       <div className="space-y-4">
         {exercises.map((exercise, index) => (
           <div
-            key={exercise.id}
+            key={exercise.id || index}
             className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 hover:shadow-md transition-all duration-200"
           >
             <div className="flex items-center space-x-4 flex-1">
@@ -46,7 +46,7 @@ const ExerciseList = ({ exercises, onEdit, onRemove, errors }) => {
                       💤 {exercise.restTime}s descanso
                     </span>
                   )}
-                  {exercise.targetMuscles.length > 0 && (
+                  {exercise.targetMuscles && exercise.targetMuscles.length > 0 && (
                     <span className="bg-white px-2 py-1 rounded-full border">
                       💪 {exercise.targetMuscles.length} músculos
                     </span>
@@ -58,13 +58,15 @@ const ExerciseList = ({ exercises, onEdit, onRemove, errors }) => {
             <div className="flex space-x-2">
               <button
                 onClick={() => onEdit(index)}
-                className="btn btn-sm bg-white text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+                disabled={disabled}
+                className="px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ✏️ Editar
               </button>
               <button
                 onClick={() => onRemove(index)}
-                className="btn btn-sm bg-white text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+                disabled={disabled}
+                className="px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 hover:border-red-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 🗑️ Remover
               </button>

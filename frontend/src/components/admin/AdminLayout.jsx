@@ -1,4 +1,3 @@
-// src/components/admin/AdminLayout.jsx
 import React, { useState, useEffect } from 'react';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
@@ -30,8 +29,8 @@ const AdminLayout = ({ children, activeTab, setActiveTab }) => {
         setSidebarOpen={setSidebarOpen}
       />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col lg:ml-64 min-w-0 transition-all duration-300">
         <AdminHeader
           company={company}
           sidebarOpen={sidebarOpen}
@@ -39,7 +38,7 @@ const AdminLayout = ({ children, activeTab, setActiveTab }) => {
         />
 
         <main className="flex-1 p-4 lg:p-8">
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>
         </main>

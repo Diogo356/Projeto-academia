@@ -1,280 +1,425 @@
 // src/components/admin/ExerciseForm.jsx
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
+import { 
+  FaRunning, FaDumbbell, FaFire, FaSnowflake, FaUser,
+  FaSave, FaPlus, FaTrash, FaUndo, FaVideo, FaImage,
+  FaCheckCircle, FaExclamationCircle, FaUpload, FaSpinner
+} from 'react-icons/fa';
 import MuscleSelector from './MuscleSelector';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const ExerciseForm = ({ exercise, onChange, onSubmit, onCancel, editingIndex, errors }) => {
-  const exerciseTypes = [
-    { value: 'cardio', label: 'Cardio', icon: '🏃‍♂️', color: 'blue' },
-    { value: 'strength', label: 'Força', icon: '🏋️‍♂️', color: 'red' },
-    { value: 'warmup', label: 'Aquecimento', icon: '🔥', color: 'orange' },
-    { value: 'cooldown', label: 'Desaquecimento', icon: '❄️', color: 'purple' },
-    { value: 'flexibility', label: 'Flexibilidade', icon: '🧘‍♂️', color: 'green' }
-  ];
+const EXERCISE_TYPES = [
+  { value: 'cardio', label: 'Cardio', icon: FaRunning, color: 'blue', bg: 'bg-blue-50', border: 'border-blue-500', text: 'text-blue-700', iconColor: 'text-blue-600' },
+  { value: 'strength', label: 'Força', icon: FaDumbbell, color: 'red', bg: 'bg-red-50', border: 'border-red-500', text: 'text-red-700', iconColor: 'text-red-600' },
+  { value: 'warmup', label: 'Aquecimento', icon: FaFire, color: 'orange', bg: 'bg-orange-50', border: 'border-orange-500', text: 'text-orange-700', iconColor: 'text-orange-600' },
+  { value: 'cooldown', label: 'Desaquecimento', icon: FaSnowflake, color: 'purple', bg: 'bg-purple-50', border: 'border-purple-500', text: 'text-purple-700', iconColor: 'text-purple-600' },
+  { value: 'flexibility', label: 'Flexibilidade', icon: FaUser, color: 'green', bg: 'bg-green-50', border: 'border-green-500', text: 'text-green-700', iconColor: 'text-green-600' }
+];
 
-  const handleChange = (field, value) => {
+const SUPPORTED_FILE_TYPES = {
+  image: ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'],
+  video: ['video/mp4', 'video/quicktime', 'video/webm']
+};
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+const DEFAULT_EXERCISE = {
+  name: '',
+  duration: 0,
+  type: 'cardio',
+  restTime: 30,
+  sets: 1,
+  reps: 0,
+  weight: 0,
+  targetMuscles: [],
+  mediaFile: null,
+  instructions: ''
+};
+
+const ExerciseForm = ({ 
+  exercise = DEFAULT_EXERCISE, 
+  onChange, 
+  onSubmit, 
+  onCancel, 
+  editingIndex, 
+  errors = {},  // Agora com default
+  isLoading = false 
+}) => {
+  const isEditing = editingIndex !== null;
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const safeExercise = exercise || DEFAULT_EXERCISE;
+
+  const handleChange = useCallback((field, value) => {
     onChange(prev => ({ ...prev, [field]: value }));
-  };
+  }, [onChange]);
 
-  const handleMuscleSelect = (muscle) => {
+  const handleMuscleSelect = useCallback((muscle) => {
     onChange(prev => ({
       ...prev,
       targetMuscles: prev.targetMuscles.includes(muscle)
         ? prev.targetMuscles.filter(m => m !== muscle)
         : [...prev.targetMuscles, muscle]
     }));
-  };
+  }, [onChange]);
 
-  const handleMediaUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        onChange(prev => ({
-          ...prev,
-          mediaFile: {
-            file,
-            url: e.target.result,
-            type: file.type.startsWith('video/') ? 'video' : 'image',
-            name: file.name
-          }
-        }));
-      };
-      reader.readAsDataURL(file);
+  const handleMediaUpload = useCallback((e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const validTypes = [...SUPPORTED_FILE_TYPES.image, ...SUPPORTED_FILE_TYPES.video];
+    if (!validTypes.includes(file.type)) {
+      alert('Formato não suportado. Use PNG, JPG, GIF, MP4 ou WEBM.');
+      return;
     }
-  };
 
-  const removeMedia = () => {
+    if (file.size > MAX_FILE_SIZE) {
+      alert('Arquivo muito grande! Máximo: 50MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      onChange(prev => ({
+        ...prev,
+        mediaFile: {
+          file,
+          url: ev.target.result,
+          type: file.type.startsWith('video/') ? 'video' : 'image',
+          name: file.name,
+          size: file.size
+        }
+      }));
+    };
+    reader.readAsDataURL(file);
+  }, [onChange]);
+
+  const removeMedia = useCallback(() => {
     onChange(prev => ({ ...prev, mediaFile: null }));
-  };
+  }, [onChange]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = useCallback((e) => {
     e.preventDefault();
-    onSubmit(exercise);
-  };
+    onSubmit(safeExercise);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+  }, [onSubmit, safeExercise]);
+
+  const handleTypeSelect = useCallback((type) => {
+    handleChange('type', type);
+    if (type !== 'strength') {
+      handleChange('sets', 1);
+      handleChange('reps', 0);
+      handleChange('weight', 0);
+    }
+  }, [handleChange]);
+
+  const durationInMinutes = useMemo(() => Math.floor(safeExercise.duration / 60), [safeExercise.duration]);
+  const formTitle = useMemo(() => isEditing ? 'Editar Exercício' : 'Novo Exercício', [isEditing]);
+  const submitButtonText = useMemo(() => isEditing ? 'Atualizar' : 'Adicionar', [isEditing]);
+  const submitButtonIcon = isEditing ? FaSave : FaPlus;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-      <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-        <span className="w-3 h-3 bg-green-500 rounded-full mr-3"></span>
-        {editingIndex !== null ? 'Editar Exercício' : 'Adicionar Novo Exercício'}
-      </h3>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6 lg:p-8 max-w-4xl mx-auto"
+    >
+      <div className="flex items-center mb-8">
+        <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full mr-3 shadow-sm"></div>
+        <h3 className="text-2xl font-bold text-gray-900">{formTitle}</h3>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        
-        {/* Nome e Duração */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Nome + Duração */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nome do Exercício *
+            <label className="flex items-center text-sm font-semibold text-gray-700 mb-2">
+              Nome do Exercício <span className="text-red-500 ml-1">*</span>
             </label>
             <input
               type="text"
-              value={exercise.name}
+              value={safeExercise.name}
               onChange={(e) => handleChange('name', e.target.value)}
-              className={`input input-bordered w-full text-lg ${errors.exerciseName ? 'input-error' : ''}`}
+              className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-100 ${
+                errors.exerciseName 
+                  ? 'border-red-400 bg-red-50' 
+                  : 'border-gray-200 hover:border-gray-300 focus:border-blue-500'
+              } ${isLoading ? 'opacity-50' : ''}`}
               placeholder="Ex: Supino Reto com Barra"
+              disabled={isLoading}
             />
-            {errors.exerciseName && <p className="text-red-500 text-sm mt-2">{errors.exerciseName}</p>}
+            <AnimatePresence>
+              {errors.exerciseName && (
+                <motion.p
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center text-red-600 text-sm mt-2"
+                >
+                  <FaExclamationCircle className="mr-1" /> {errors.exerciseName}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Duração (minutos) *
+            <label className="flex items-center text-sm font-semibold text-gray-700 mb-2">
+              Duração <span className="text-red-500 ml-1">*</span>
             </label>
-            <input
-              type="number"
-              value={exercise.duration / 60}
-              onChange={(e) => handleChange('duration', (parseInt(e.target.value) || 0) * 60)}
-              className={`input input-bordered w-full text-lg ${errors.duration ? 'input-error' : ''}`}
-              placeholder="30"
-            />
-            {errors.duration && <p className="text-red-500 text-sm mt-2">{errors.duration}</p>}
-          </div>
-        </div>
-
-        {/* Tipo de Exercício - ESTILO WORKOUTINFOFORM */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Tipo de Exercício
-          </label>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            {exerciseTypes.map((type) => (
-              <button
-                key={type.value}
-                type="button"
-                onClick={() => handleChange('type', type.value)}
-                className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                  exercise.type === type.value
-                    ? `border-${type.color}-500 bg-${type.color}-50 shadow-sm`
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <div className="flex flex-col items-center space-y-2">
-                  <span className="text-2xl">{type.icon}</span>
-                  <span className="font-medium text-gray-900 text-sm text-center">{type.label}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Descanso e Campos de Força */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Descanso (segundos)
-            </label>
-            <input
-              type="number"
-              value={exercise.restTime}
-              onChange={(e) => handleChange('restTime', parseInt(e.target.value) || 0)}
-              className="input input-bordered w-full"
-              placeholder="60"
-            />
-          </div>
-
-          {/* Campos específicos para força */}
-          {exercise.type === 'strength' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Séries
-                </label>
-                <input
-                  type="number"
-                  value={exercise.sets}
-                  onChange={(e) => handleChange('sets', parseInt(e.target.value) || 1)}
-                  className="input input-bordered w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Repetições *
-                </label>
-                <input
-                  type="number"
-                  value={exercise.reps}
-                  onChange={(e) => handleChange('reps', parseInt(e.target.value) || 0)}
-                  className={`input input-bordered w-full ${errors.reps ? 'input-error' : ''}`}
-                />
-                {errors.reps && <p className="text-red-500 text-sm mt-2">{errors.reps}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Peso (kg)
-                </label>
-                <input
-                  type="number"
-                  value={exercise.weight}
-                  onChange={(e) => handleChange('weight', parseInt(e.target.value) || 0)}
-                  className="input input-bordered w-full"
-                  placeholder="0"
-                />
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Seletor de Músculos */}
-        <MuscleSelector
-          selectedMuscles={exercise.targetMuscles}
-          onMuscleSelect={handleMuscleSelect}
-        />
-
-        {/* Upload de Mídia - ESTILO MELHORADO */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Mídia Demonstrativa
-          </label>
-          <div className="space-y-4">
-            <div className="flex items-center space-x-4">
+            <div className="relative">
               <input
-                type="file"
-                accept="image/*,video/*"
-                onChange={handleMediaUpload}
-                className="file-input file-input-bordered flex-1"
+                type="number"
+                min="1"
+                max="300"
+                value={durationInMinutes}
+                onChange={(e) => handleChange('duration', (parseInt(e.target.value) || 0) * 60)}
+                className={`w-full px-4 py-3 pr-12 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-100 ${
+                  errors.duration 
+                    ? 'border-red-400 bg-red-50' 
+                    : 'border-gray-200 hover:border-gray-300 focus:border-blue-500'
+                }`}
+                placeholder="30"
+                disabled={isLoading}
               />
-              <span className="text-sm text-gray-500">PNG, JPG, GIF, MP4</span>
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">min</span>
             </div>
-            
-            {exercise.mediaFile && (
-              <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
-                <div className="flex items-center space-x-4">
-                  {exercise.mediaFile.type === 'video' ? (
-                    <div className="w-16 h-16 bg-red-500 rounded-lg flex items-center justify-center">
-                      <span className="text-white text-2xl">🎥</span>
-                    </div>
-                  ) : (
-                    <img 
-                      src={exercise.mediaFile.url} 
-                      alt="Preview" 
-                      className="w-16 h-16 rounded-lg object-cover border"
+          </div>
+        </div>
+
+        {/* Tipo */}
+        <div>
+          <label className="text-sm font-semibold text-gray-700 mb-4 block">Tipo de Exercício</label>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {EXERCISE_TYPES.map((type) => {
+              const Icon = type.icon;
+              const selected = safeExercise.type === type.value;
+              return (
+                <motion.button
+                  key={type.value}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="button"
+                  onClick={() => handleTypeSelect(type.value)}
+                  disabled={isLoading}
+                  className={`relative p-5 rounded-2xl border-2 transition-all duration-300 flex flex-col items-center space-y-2 ${
+                    selected
+                      ? `${type.border} ${type.bg} shadow-lg ring-4 ring-${type.color}-100`
+                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+                  } ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  {selected && (
+                    <motion.div
+                      layoutId="activeTypeIndicator"
+                      className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/20 to-transparent pointer-events-none"
                     />
                   )}
+                  <Icon className={`text-2xl ${selected ? type.iconColor : 'text-gray-500'}`} />
+                  <span className={`font-semibold text-sm ${selected ? type.text : 'text-gray-700'}`}>
+                    {type.label}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Campos de Força */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div>
+            <label className="text-sm font-semibold text-gray-700 mb-2 block">Descanso (seg)</label>
+            <input
+              type="number"
+              min="0"
+              max="600"
+              value={safeExercise.restTime}
+              onChange={(e) => handleChange('restTime', parseInt(e.target.value) || 0)}
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+              placeholder="60"
+              disabled={isLoading}
+            />
+          </div>
+
+          <AnimatePresence>
+            {safeExercise.type === 'strength' && (
+              <>
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                  <label className="text-sm font-semibold text-gray-700 mb-2 block">Séries</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={safeExercise.sets}
+                    onChange={(e) => handleChange('sets', parseInt(e.target.value) || 1)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                    disabled={isLoading}
+                  />
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                  <label className="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                    Repetições <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={safeExercise.reps}
+                    onChange={(e) => handleChange('reps', parseInt(e.target.value) || 0)}
+                    className={`w-full px-4 py-3 rounded-xl border-2 transition-all focus:ring-4 focus:ring-blue-100 ${
+                      errors.reps ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-gray-300 focus:border-blue-500'
+                    }`}
+                    disabled={isLoading}
+                  />
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                  <label className="text-sm font-semibold text-gray-700 mb-2 block">Peso (kg)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={safeExercise.weight}
+                    onChange={(e) => handleChange('weight', parseFloat(e.target.value) || 0)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                    placeholder="0"
+                    disabled={isLoading}
+                  />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Músculos */}
+        <div>
+          <label className="text-sm font-semibold text-gray-700 mb-3 block">Músculos Alvo</label>
+          <MuscleSelector
+            selectedMuscles={safeExercise.targetMuscles}
+            onMuscleSelect={handleMuscleSelect}
+            disabled={isLoading}
+          />
+        </div>
+
+        {/* Upload */}
+        <div>
+          <label className="text-sm font-semibold text-gray-700 mb-3 block">Mídia Demonstrativa</label>
+          {!safeExercise.mediaFile ? (
+            <label className="flex flex-col items-center justify-center w-full h-48 border-3 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all group">
+              <input type="file" accept="image/*,video/*" onChange={handleMediaUpload} className="hidden" disabled={isLoading} />
+              <FaUpload className="text-4xl text-gray-400 group-hover:text-blue-500 transition-colors mb-3" />
+              <p className="text-gray-600 font-medium">Clique para fazer upload</p>
+              <p className="text-xs text-gray-500 mt-1">PNG, JPG, GIF, MP4, WEBM • até 50MB</p>
+            </label>
+          ) : (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="relative bg-gray-50 rounded-2xl p-5 border-2 border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  {safeExercise.mediaFile.type === 'video' ? (
+                    <div className="relative w-20 h-20 bg-gradient-to-br from-red-400 to-red-600 rounded-xl overflow-hidden shadow-md">
+                      <video src={safeExercise.mediaFile.url} className="w-full h-full object-cover" muted />
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                        <FaVideo className="text-white text-xl" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl overflow-hidden shadow-md">
+                      <img src={safeExercise.mediaFile.url} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                   <div>
-                    <div className="font-semibold text-gray-900">
-                      {exercise.mediaFile.name}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {exercise.mediaFile.type === 'video' ? 'Vídeo' : 'Imagem'} • {
-                        exercise.mediaFile.type === 'video' ? 'MP4' : 'JPG/PNG'
-                      }
-                    </div>
+                    <p className="font-semibold text-gray-900 truncate max-w-xs">{safeExercise.mediaFile.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {safeExercise.mediaFile.type === 'video' ? 'Vídeo' : 'Imagem'} • {(safeExercise.mediaFile.size / 1024 / 1024).toFixed(1)} MB
+                    </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={removeMedia}
-                  className="btn btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700"
-                >
-                  🗑️ Remover
+                <button type="button" onClick={removeMedia} className="p-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all" disabled={isLoading}>
+                  <FaTrash />
                 </button>
               </div>
-            )}
-          </div>
+            </motion.div>
+          )}
         </div>
 
-        {/* Instruções - ESTILO MELHORADO */}
+        {/* Instruções */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Instruções de Execução
-          </label>
+          <label className="text-sm font-semibold text-gray-700 mb-2 block">Instruções de Execução</label>
           <textarea
-            value={exercise.instructions}
+            value={safeExercise.instructions}
             onChange={(e) => handleChange('instructions', e.target.value)}
-            className="textarea textarea-bordered w-full text-lg"
-            rows="4"
-            placeholder="Descreva a forma correta, dicas de execução, cuidados importantes, respiração e variações possíveis..."
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all resize-none"
+            rows="5"
+            placeholder="Descreva a execução correta, postura, respiração, dicas e variações..."
+            disabled={isLoading}
           />
-          <div className="text-sm text-gray-500 mt-2">
-            Dica: Inclua detalhes sobre postura, amplitude de movimento e respiração
-          </div>
+          <p className="text-xs text-gray-500 mt-2 flex items-center">
+            <FaCheckCircle className="mr-1 text-green-500" />
+            Inclua postura, amplitude, respiração e cuidados
+          </p>
         </div>
 
-        {/* Botões de Ação - ESTILO MELHORADO */}
-        <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-          {editingIndex !== null && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="btn btn-ghost border-2 border-gray-300 hover:border-gray-400"
-            >
-              ↩️ Cancelar Edição
+        {/* Ações */}
+        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-gray-200">
+          {isEditing && (
+            <button type="button" onClick={onCancel} disabled={isLoading} className="px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center">
+              <FaUndo className="mr-2" /> Cancelar
             </button>
           )}
-          <button
-            type="submit"
-            className="btn btn-primary text-lg font-semibold px-8"
-          >
-            {editingIndex !== null ? '💾 Atualizar Exercício' : '➕ Adicionar Exercício'}
+          <button type="submit" disabled={isLoading} className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:transform-none flex items-center justify-center">
+            {isLoading ? <FaSpinner className="animate-spin mr-2" /> : React.createElement(submitButtonIcon, { className: "mr-2" })}
+            {isLoading ? 'Processando...' : submitButtonText}
           </button>
         </div>
+
+        {/* Sucesso */}
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="fixed bottom-6 right-6 bg-green-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 z-50"
+            >
+              <FaCheckCircle className="text-2xl" />
+              <div>
+                <p className="font-bold">Sucesso!</p>
+                <p className="text-sm">Exercício salvo com sucesso.</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </form>
-    </div>
+    </motion.div>
   );
+};
+
+ExerciseForm.propTypes = {
+  exercise: PropTypes.shape({
+    name: PropTypes.string,
+    duration: PropTypes.number,
+    type: PropTypes.string,
+    restTime: PropTypes.number,
+    sets: PropTypes.number,
+    reps: PropTypes.number,
+    weight: PropTypes.number,
+    targetMuscles: PropTypes.arrayOf(PropTypes.string),
+    mediaFile: PropTypes.object,
+    instructions: PropTypes.string
+  }),
+  onChange: PropTypes.func.isRequired,
+  onSubmit: PropTypes.func.isRequired,
+  onCancel: PropTypes.func,
+  editingIndex: PropTypes.number,
+  errors: PropTypes.object,
+  isLoading: PropTypes.bool
+};
+
+ExerciseForm.defaultProps = {
+  exercise: DEFAULT_EXERCISE,
+  errors: {},
+  isLoading: false
 };
 
 export default ExerciseForm;

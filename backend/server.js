@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 dotenv.config();
 
 import authRoutes from './src/routes/auth.route.js'
+import workoutRoutes from './src/routes/workouts.route.js';
 
 const app = express();
 const server = createServer(app);
@@ -53,7 +54,7 @@ io.on('connection', (socket) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
-
+app.use('/api/workouts', workoutRoutes);
 // Rota de saúde
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -67,6 +68,7 @@ app.get('/api/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({ message: 'Bem-vindo à API Academia' });
 });
+
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);

@@ -6,7 +6,7 @@ const exerciseSchema = new mongoose.Schema({
   publicId: {
     type: String,
     required: true,
-    default: () => crypto.randomBytes(12).toString('hex')
+    default: () => crypto.randomBytes(32).toString('hex')
   },
   
   name: {
@@ -47,7 +47,7 @@ const exerciseSchema = new mongoose.Schema({
   },
   
   restTime: {
-    type: Number, // em segundos
+    type: Number,
     default: 0
   },
   
@@ -64,7 +64,7 @@ const exerciseSchema = new mongoose.Schema({
   },
   
   weight: {
-    type: Number, // em kg
+    type: Number,
     default: 0,
     min: 0
   }
@@ -90,7 +90,7 @@ const workoutSchema = new mongoose.Schema({
     required: true
   },
   
-  // Dados básicos do treino
+  // Apenas nome e descrição
   name: {
     type: String,
     required: [true, 'Nome do treino é obrigatório'],
@@ -102,63 +102,26 @@ const workoutSchema = new mongoose.Schema({
     trim: true
   },
   
-  category: {
-    type: String,
-    enum: ['cardio', 'strength', 'hiit', 'yoga', 'pilates', 'mobility', 'custom'],
-    default: 'custom'
-  },
-  
-  difficulty: {
-    type: String,
-    enum: ['beginner', 'intermediate', 'advanced'],
-    default: 'intermediate'
-  },
-  
-  // Array de exercícios
   exercises: [exerciseSchema],
-  
-  // Calculado automaticamente
-  totalDuration: {
-    type: Number, // em segundos
-    default: 0
-  },
-  
-  // Metadados
+
   isActive: {
     type: Boolean,
     default: true
-  },
-  
-  isTemplate: {
-    type: Boolean,
-    default: false
-  },
-  
-  tags: [{
-    type: String,
-    trim: true
-  }]
+  }
 
 }, {
   timestamps: true
 });
 
-// Índices para performance
+// Índices
 workoutSchema.index({ publicId: 1 });
 workoutSchema.index({ companyPublicId: 1, createdAt: -1 });
-workoutSchema.index({ companyPublicId: 1, category: 1 });
 workoutSchema.index({ companyPublicId: 1, isActive: 1 });
 workoutSchema.index({ createdByPublicId: 1 });
 
-// Middleware para calcular duração total antes de salvar
+// CALCULAR totalDuration AUTOMATICAMENTE
 workoutSchema.pre('save', function(next) {
-  if (this.exercises && this.exercises.length > 0) {
-    this.totalDuration = this.exercises.reduce((total, exercise) => {
-      return total + (exercise.duration || 0);
-    }, 0);
-  } else {
-    this.totalDuration = 0;
-  }
+  this.totalDuration = this.exercises.reduce((total, ex) => total + (ex.duration || 0), 0);
   next();
 });
 

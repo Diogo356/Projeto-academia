@@ -1,4 +1,3 @@
-// src/components/admin/AdminSidebar.jsx
 import React from 'react';
 
 const menuItems = [
@@ -22,15 +21,15 @@ const AdminSidebar = ({ activeTab, setActiveTab, sidebarOpen, setSidebarOpen }) 
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-gray-200 transform transition-transform lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-30 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:z-20 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="p-6">
+        <div className="p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-900">Painel Admin</h2>
         </div>
 
-        <nav className="px-4 pb-6">
+        <nav className="px-4 pb-6 mt-4">
           {menuItems.map((item) => (
             <button
               key={item.id}

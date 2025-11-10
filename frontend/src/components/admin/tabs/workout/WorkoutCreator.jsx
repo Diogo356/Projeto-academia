@@ -1,341 +1,322 @@
 // src/components/admin/WorkoutCreator.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ExerciseForm from './ExerciseForm';
 import ExerciseList from './ExerciseList';
 import WorkoutSummary from './WorkoutSummary';
+import workoutService from '../../../../services/workoutService';
+import { 
+  FaSave, FaTrashAlt, FaPlus, FaCheckCircle, 
+  FaExclamationCircle, FaEdit, FaClock, FaDumbbell,
+  FaSpinner
+} from 'react-icons/fa';
+
+const DEFAULT_EXERCISE = {
+  name: '',
+  duration: 0,
+  type: 'cardio',
+  restTime: 30,
+  sets: 1,
+  reps: 0,
+  weight: 0,
+  targetMuscles: [],
+  mediaFile: null,
+  instructions: ''
+};
 
 const WorkoutCreator = () => {
   const [workoutData, setWorkoutData] = useState({
     name: '',
     description: '',
-    totalDuration: 0,
-    difficulty: 'intermediate',
-    category: 'cardio',
     exercises: []
   });
 
-  const [currentExercise, setCurrentExercise] = useState({
-    name: '',
-    duration: 0,
-    type: 'cardio',
-    targetMuscles: [],
-    mediaFile: null,
-    instructions: '',
-    restTime: 30,
-    sets: 3,
-    reps: 12,
-    weight: 0
-  });
-
+  const [currentExercise, setCurrentExercise] = useState(DEFAULT_EXERCISE);
   const [editingIndex, setEditingIndex] = useState(null);
-  const [errors, setErrors] = useState({});
-  const [activeTab, setActiveTab] = useState('exercises'); // PRIMEIRA ABA
+  const [isLoading, setIsLoading] = useState(false);
+  const [saveMessage, setSaveMessage] = useState({ type: '', text: '' });
 
-  const validateWorkout = () => {
-    const newErrors = {};
-    if (!workoutData.name.trim()) newErrors.name = 'Nome do treino é obrigatório';
-    if (workoutData.exercises.length === 0) newErrors.exercises = 'Adicione pelo menos um exercício';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  // VALIDAÇÃO
+  const workoutErrors = useMemo(() => {
+    const err = {};
+    if (!workoutData.name.trim()) err.name = true;
+    if (workoutData.exercises.length === 0) err.exercises = true;
+    return err;
+  }, [workoutData.name, workoutData.exercises.length]);
 
+  const canSave = !workoutErrors.name && !workoutErrors.exercises;
+
+  const exerciseErrors = useMemo(() => {
+    const err = {};
+    if (!currentExercise.name?.trim()) err.exerciseName = 'Nome é obrigatório';
+    if (!currentExercise.duration || currentExercise.duration <= 0) {
+      err.duration = 'Duração > 0';
+    }
+    if (currentExercise.type === 'strength' && (!currentExercise.reps || currentExercise.reps <= 0)) {
+      err.reps = 'Reps obrigatórias para força';
+    }
+    return err;
+  }, [currentExercise]);
+
+  // ADICIONAR/EDITAR EXERCÍCIO
   const addOrUpdateExercise = (exerciseData) => {
     setWorkoutData(prev => {
-      let updatedExercises = [...prev.exercises];
-      let durationDelta = exerciseData.duration;
-
+      const updated = [...prev.exercises];
       if (editingIndex !== null) {
-        durationDelta -= prev.exercises[editingIndex].duration;
-        updatedExercises[editingIndex] = { ...exerciseData, id: prev.exercises[editingIndex].id };
+        updated[editingIndex] = { ...exerciseData, id: prev.exercises[editingIndex].id };
       } else {
-        updatedExercises.push({ ...exerciseData, id: Date.now() });
+        updated.push({ ...exerciseData, id: Date.now() });
       }
-
-      return {
-        ...prev,
-        exercises: updatedExercises,
-        totalDuration: prev.totalDuration + durationDelta
-      };
+      return { ...prev, exercises: updated };
     });
+    resetForm();
+  };
 
+  const resetForm = () => {
+    setCurrentExercise(DEFAULT_EXERCISE);
     setEditingIndex(null);
-    setCurrentExercise({
-      name: '',
-      duration: 0,
-      type: 'cardio',
-      targetMuscles: [],
-      mediaFile: null,
-      instructions: '',
-      restTime: 30,
-      sets: 3,
-      reps: 12,
-      weight: 0
-    });
   };
 
   const removeExercise = (index) => {
-    const updatedExercises = [...workoutData.exercises];
-    const removedExercise = updatedExercises.splice(index, 1)[0];
-
     setWorkoutData(prev => ({
       ...prev,
-      exercises: updatedExercises,
-      totalDuration: prev.totalDuration - removedExercise.duration
+      exercises: prev.exercises.filter((_, i) => i !== index)
     }));
-
-    if (editingIndex === index) {
-      setEditingIndex(null);
-      setCurrentExercise({
-        name: '',
-        duration: 0,
-        type: 'cardio',
-        targetMuscles: [],
-        mediaFile: null,
-        instructions: '',
-        restTime: 30,
-        sets: 3,
-        reps: 12,
-        weight: 0
-      });
-    }
+    if (editingIndex === index) resetForm();
   };
 
   const startEditing = (index) => {
     setCurrentExercise({ ...workoutData.exercises[index] });
     setEditingIndex(index);
-    setActiveTab('exercises');
   };
 
-  const saveWorkout = () => {
-    if (!validateWorkout()) return;
-    
-    const workoutToSave = {
-      ...workoutData,
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+  // SALVAR
+  const saveWorkout = async () => {
+    if (!canSave) return;
 
-    console.log('Treino salvo:', workoutToSave);
-    alert('Treino salvo com sucesso!');
+    setIsLoading(true);
+    setSaveMessage({ type: '', text: '' });
 
-    setWorkoutData({
-      name: '',
-      description: '',
-      totalDuration: 0,
-      difficulty: 'intermediate',
-      category: 'cardio',
-      exercises: []
-    });
-    setActiveTab('exercises');
+    try {
+      const response = await workoutService.createWorkout(workoutData);
+      
+      setSaveMessage({
+        type: 'success',
+        text: response.message || 'Treino criado com sucesso!'
+      });
+
+      setTimeout(() => {
+        setWorkoutData({ name: '', description: '', exercises: [] });
+        resetForm();
+        setSaveMessage({ type: '', text: '' });
+      }, 2000);
+
+    } catch (error) {
+      setSaveMessage({
+        type: 'error',
+        text: error.message || 'Erro ao salvar. Tente novamente.'
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // ABAS: Exercícios primeiro, Revisar depois
-  const tabs = [
-    { id: 'exercises', label: 'Exercícios', icon: '💪' },
-    { id: 'review', label: 'Revisar', icon: '👁️' }
-  ];
-  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 lg:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+
+        {/* MENSAGEM */}
+        <AnimatePresence>
+          {saveMessage.text && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className={`mb-6 p-4 rounded-2xl border-2 flex items-center ${
+                saveMessage.type === 'success'
+                  ? 'bg-green-50 border-green-200 text-green-800'
+                  : 'bg-red-50 border-red-200 text-red-800'
+              }`}
+            >
+              {saveMessage.type === 'success' ? (
+                <FaCheckCircle className="text-green-500 mr-3" />
+              ) : (
+                <FaExclamationCircle className="text-red-500 mr-3" />
+              )}
+              <span className="font-medium">{saveMessage.text}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* HEADER */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/50 p-6 lg:p-8 mb-8"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div>
-              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-                Criar Novo Treino
+              <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 flex items-center">
+                <FaDumbbell className="mr-3 text-blue-600" />
+                Criar Treino
               </h1>
-              <p className="text-gray-600 mt-2">
-                Adicione exercícios e monte seu treino
-              </p>
+              <p className="text-gray-600 mt-2">Simples, rápido e funcional</p>
             </div>
-            
             <WorkoutSummary workoutData={workoutData} />
           </div>
 
-          {/* Navegação por Abas */}
+          {/* NOME */}
           <div className="mt-6">
-            <div className="flex space-x-1 bg-gray-100 rounded-xl p-1">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-4 py-3 rounded-lg text-sm font-medium transition-all flex-1 justify-center ${
-                    activeTab === tab.id
-                      ? 'bg-white text-blue-600 shadow-sm border border-blue-200'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="text-lg">{tab.icon}</span>
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              ))}
-            </div>
+            <input
+              type="text"
+              placeholder="Nome do treino"
+              value={workoutData.name}
+              onChange={(e) => setWorkoutData(prev => ({ ...prev, name: e.target.value }))}
+              className={`w-full px-5 py-3 rounded-xl text-lg font-medium transition-all focus:outline-none focus:ring-4 focus:ring-blue-100 ${
+                workoutErrors.name
+                  ? 'border-2 border-red-400 bg-red-50'
+                  : 'border-2 border-gray-200 focus:border-blue-500'
+              }`}
+              disabled={isLoading}
+            />
+            {workoutErrors.name && (
+              <p className="text-red-600 text-sm mt-2 flex items-center">
+                <FaExclamationCircle className="mr-1" /> Nome é obrigatório
+              </p>
+            )}
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          
-          {/* Conteúdo Principal */}
-          <div className="xl:col-span-3 space-y-6">
-            
-            {/* Gerenciar Exercícios */}
-            {activeTab === 'exercises' && (
-              <div className="space-y-6">
-                <ExerciseForm
-                  exercise={currentExercise}
-                  onChange={setCurrentExercise}
-                  onSubmit={addOrUpdateExercise}
-                  onCancel={() => setEditingIndex(null)}
-                  editingIndex={editingIndex}
-                  errors={errors}
-                />
+          {/* DESCRIÇÃO */}
+          <div className="mt-6">
+            <textarea
+              value={workoutData.description}
+              onChange={(e) => setWorkoutData(prev => ({ ...prev, description: e.target.value }))}
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 resize-none"
+              rows="2"
+              placeholder="Descrição (opcional)"
+              disabled={isLoading}
+            />
+          </div>
+        </motion.div>
 
-                {workoutData.exercises.length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+
+          {/* CONTEÚDO */}
+          <div className="xl:col-span-3 space-y-8">
+
+            {/* FORM EXERCÍCIO */}
+            <motion.div layout className="bg-white rounded-3xl shadow-lg border border-gray-100 p-6 lg:p-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                {editingIndex !== null ? <FaEdit className="mr-2 text-orange-600" /> : <FaPlus className="mr-2 text-blue-600" />}
+                {editingIndex !== null ? 'Editar Exercício' : 'Adicionar Exercício'}
+              </h2>
+              <ExerciseForm
+                exercise={currentExercise}
+                onChange={setCurrentExercise}
+                onSubmit={addOrUpdateExercise}
+                onCancel={resetForm}
+                editingIndex={editingIndex}
+                errors={exerciseErrors}
+                isLoading={isLoading}
+              />
+            </motion.div>
+
+            {/* LISTA */}
+            <AnimatePresence>
+              {workoutData.exercises.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="bg-white rounded-3xl shadow-lg border border-gray-100 p-6 lg:p-8"
+                >
+                  <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                    <FaClock className="mr-2 text-purple-600" />
+                    Sequência ({workoutData.exercises.length} exercício{workoutData.exercises.length !== 1 ? 's' : ''})
+                  </h2>
                   <ExerciseList
                     exercises={workoutData.exercises}
                     onEdit={startEditing}
                     onRemove={removeExercise}
-                    errors={errors}
+                    disabled={isLoading}
                   />
-                )}
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {/* Revisão */}
-            {activeTab === 'review' && (
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-                  <span className="w-3 h-3 bg-green-500 rounded-full mr-3"></span>
-                  Revisão Final do Treino
+            {/* REVISÃO */}
+            {workoutData.exercises.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-3xl p-6 lg:p-8 border border-emerald-200"
+              >
+                <h3 className="text-xl font-bold text-emerald-900 mb-6 flex items-center">
+                  <FaCheckCircle className="mr-2 text-emerald-600" />
+                  Revisão Final
                 </h3>
-                
-                {errors.exercises && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-                    <p className="text-red-700">{errors.exercises}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white/70 backdrop-blur rounded-2xl p-4 text-center">
+                    <div className="text-3xl font-bold text-emerald-600">{workoutData.exercises.length}</div>
+                    <div className="text-sm text-emerald-700">Exercícios</div>
                   </div>
+                  <div className="bg-white/70 backdrop-blur rounded-2xl p-4 text-center">
+                    <div className="text-3xl font-bold text-teal-600">
+                      {Math.floor(workoutData.exercises.reduce((t, e) => t + e.duration, 0) / 60)}:
+                      {String(workoutData.exercises.reduce((t, e) => t + e.duration, 0) % 60).padStart(2, '0')}
+                    </div>
+                    <div className="text-sm text-teal-700">Duração</div>
+                  </div>
+                </div>
+                {workoutErrors.exercises && (
+                  <p className="text-red-600 text-sm mt-4 flex items-center">
+                    <FaExclamationCircle className="mr-1" /> Adicione pelo menos 1 exercício
+                  </p>
                 )}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                  <div className="bg-blue-50 rounded-xl p-4 text-center">
-                    <div className="text-2xl font-bold text-blue-600">{workoutData.exercises.length}</div>
-                    <div className="text-sm text-blue-700 font-medium">Exercícios</div>
-                  </div>
-                  <div className="bg-green-50 rounded-xl p-4 text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {Math.floor(workoutData.totalDuration / 60)}:{String(workoutData.totalDuration % 60).padStart(2, '0')}
-                    </div>
-                    <div className="text-sm text-green-700 font-medium">Duração Total</div>
-                  </div>
-                  <div className="bg-purple-50 rounded-xl p-4 text-center">
-                    <div className="text-2xl font-bold text-purple-600 capitalize">
-                      {workoutData.difficulty}
-                    </div>
-                    <div className="text-sm text-purple-700 font-medium">Dificuldade</div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-900 text-lg">Sequência do Treino</h4>
-                  {workoutData.exercises.map((exercise, index) => (
-                    <div key={exercise.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                      <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900">{exercise.name}</div>
-                        <div className="text-sm text-gray-600">
-                          {Math.floor(exercise.duration / 60)}min • {exercise.type} • {exercise.targetMuscles.join(', ')}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </motion.div>
             )}
           </div>
 
-          {/* Sidebar de Ações */}
+          {/* SIDEBAR */}
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
-              
+            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-6">
+              <h3 className="font-bold text-gray-900 mb-4">Ações</h3>
               <div className="space-y-3">
                 <button
                   onClick={saveWorkout}
-                  disabled={!workoutData.name || workoutData.exercises.length === 0}
-                  className="btn btn-primary w-full"
+                  disabled={!canSave || isLoading}
+                  className={`w-full py-3 rounded-xl font-semibold transition-all flex items-center justify-center space-x-2 ${
+                    canSave && !isLoading
+                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
                 >
-                  Salvar Treino
+                  {isLoading ? <FaSpinner className="animate-spin" /> : <FaSave />}
+                  <span>{isLoading ? 'Salvando...' : 'Salvar Treino'}</span>
                 </button>
-                
-                <button className="btn btn-outline w-full">
-                  Salvar como Rascunho
-                </button>
-                
-                <button 
-                  onClick={() => {
-                    setWorkoutData({
-                      name: '',
-                      description: '',
-                      totalDuration: 0,
-                      difficulty: 'intermediate',
-                      category: 'cardio',
-                      exercises: []
-                    });
-                    setActiveTab('exercises');
-                  }}
-                  className="btn btn-ghost w-full text-red-600 hover:bg-red-50"
-                >
-                  Limpar Tudo
-                </button>
-              </div>
 
-              <div className="mt-6 pt-4 border-t border-gray-200">
-                <div className="text-xs text-gray-500 space-y-2">
-                  <div className="flex justify-between">
-                    <span>Status:</span>
-                    <span className={`font-medium ${
-                      workoutData.exercises.length > 0 ? 'text-green-600' : 'text-yellow-600'
-                    }`}>
-                      {workoutData.exercises.length > 0 ? 'Pronto' : 'Incompleto'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Progresso:</span>
-                    <span className="font-medium">
-                      {workoutData.exercises.length} ex.
-                    </span>
-                  </div>
-                </div>
+                <button
+                  onClick={() => {
+                    if (confirm('Limpar tudo?')) {
+                      setWorkoutData({ name: '', description: '', exercises: [] });
+                      resetForm();
+                    }
+                  }}
+                  disabled={isLoading}
+                  className="w-full py-3 rounded-xl border-2 border-red-300 text-red-600 font-semibold hover:bg-red-50 transition-all flex items-center justify-center space-x-2"
+                >
+                  <FaTrashAlt />
+                  <span>Limpar</span>
+                </button>
               </div>
             </div>
 
-            {/* Dicas */}
-            <div className="bg-blue-50 rounded-2xl border border-blue-200 p-6">
-              <h3 className="font-semibold text-blue-900 mb-3 flex items-center">
-                <span className="text-lg mr-2">Tip</span>
-                Dicas Profissionais
-              </h3>
-              <ul className="text-sm text-blue-700 space-y-2">
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Use nomes claros e objetivos</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Adicione mídia demonstrativa</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Especifique músculos corretamente</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Inclua instruções detalhadas</span>
-                </li>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl p-6 border border-blue-200">
+              <h3 className="font-semibold text-blue-900 mb-3">Dica</h3>
+              <ul className="text-sm text-blue-700 space-y-1">
+                <li>• Nome claro</li>
+                <li>• Vídeo ou imagem</li>
+                <li>• Instruções detalhadas</li>
               </ul>
             </div>
           </div>
