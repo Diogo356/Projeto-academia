@@ -1,7 +1,10 @@
 /* src/index.css */
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: light, dark, halloween, cupcake, dracula, black, valentine, garden, pastel, coffee, esmerald, lofi, fantasy, wireframe, synthwave, retro, cyberpunk, corporate, business, luxury, night, acid, lemonade, autumn, winter, emerald, forest, aqua, cmyk, dim, nord, sunset, abyss, bumblebee, silk, caramellatte;
+}
 
-/* Estilos personalizados (agora funcionam!) */
+/* Estilos personalizados */
 .timer-gradient {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }

@@ -1,3 +1,4 @@
+// tailwind.config.js
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -5,10 +6,20 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        corporate: {
+          primary: '#1e40af',
+          secondary: '#0f766e',
+          accent: '#dc2626',
+          neutral: '#374151',
+          light: '#f8fafc'
+        }
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      }
+    },
   },
-  plugins: [require("daisyui")],
-  daisyui: {
-    themes: ["light", "dark", "corporate"],
-  },
+  plugins: [],
 }
