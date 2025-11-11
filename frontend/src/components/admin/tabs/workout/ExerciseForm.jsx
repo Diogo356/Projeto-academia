@@ -1,5 +1,5 @@
 // src/components/admin/ExerciseForm.jsx
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useState, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { 
   FaRunning, FaDumbbell, FaFire, FaSnowflake, FaUser,
@@ -43,28 +43,35 @@ const ExerciseForm = ({
   onSubmit, 
   onCancel, 
   editingIndex, 
-  errors = {},  // Agora com default
+  errors = {},
   isLoading = false 
 }) => {
   const isEditing = editingIndex !== null;
   const [showSuccess, setShowSuccess] = useState(false);
+  const [touchedFields, setTouchedFields] = useState({});
+  const fileInputRef = useRef(null);
 
   const safeExercise = exercise || DEFAULT_EXERCISE;
 
-  const handleChange = useCallback((field, value) => {
+  // FUNÇÕES SIMPLES - SEM useCallback para melhor performance
+  const handleChange = (field, value) => {
     onChange(prev => ({ ...prev, [field]: value }));
-  }, [onChange]);
+  };
 
-  const handleMuscleSelect = useCallback((muscle) => {
+  const handleFieldBlur = (field) => {
+    setTouchedFields(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleMuscleSelect = (muscle) => {
     onChange(prev => ({
       ...prev,
       targetMuscles: prev.targetMuscles.includes(muscle)
         ? prev.targetMuscles.filter(m => m !== muscle)
         : [...prev.targetMuscles, muscle]
     }));
-  }, [onChange]);
+  };
 
-  const handleMediaUpload = useCallback((e) => {
+  const handleMediaUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -93,38 +100,62 @@ const ExerciseForm = ({
       }));
     };
     reader.readAsDataURL(file);
-  }, [onChange]);
+  };
 
-  const removeMedia = useCallback(() => {
+  const removeMedia = () => {
     onChange(prev => ({ ...prev, mediaFile: null }));
-  }, [onChange]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(safeExercise);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
-  }, [onSubmit, safeExercise]);
+    
+    // Marca todos os campos como touched na submissão
+    const allFields = ['name', 'duration'];
+    if (safeExercise.type === 'strength') {
+      allFields.push('reps');
+    }
+    
+    const newTouchedFields = {};
+    allFields.forEach(field => {
+      newTouchedFields[field] = true;
+    });
+    setTouchedFields(newTouchedFields);
+    
+    // Verifica se há erros antes de submeter
+    const hasErrors = Object.keys(errors).length > 0;
+    if (!hasErrors) {
+      onSubmit(safeExercise);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
+  };
 
-  const handleTypeSelect = useCallback((type) => {
+  const handleTypeSelect = (type) => {
     handleChange('type', type);
     if (type !== 'strength') {
       handleChange('sets', 1);
       handleChange('reps', 0);
       handleChange('weight', 0);
     }
-  }, [handleChange]);
+  };
 
-  const durationInMinutes = useMemo(() => Math.floor(safeExercise.duration / 60), [safeExercise.duration]);
-  const formTitle = useMemo(() => isEditing ? 'Editar Exercício' : 'Novo Exercício', [isEditing]);
-  const submitButtonText = useMemo(() => isEditing ? 'Atualizar' : 'Adicionar', [isEditing]);
+  // Cálculos simples sem useMemo
+  const durationInMinutes = Math.floor(safeExercise.duration / 60);
+  const formTitle = isEditing ? 'Editar Exercício' : 'Novo Exercício';
+  const submitButtonText = isEditing ? 'Atualizar' : 'Adicionar';
   const submitButtonIcon = isEditing ? FaSave : FaPlus;
+
+  // Helper para mostrar erro apenas se o campo foi tocado
+  const shouldShowError = (field) => touchedFields[field] && errors[field];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6 lg:p-8 max-w-4xl mx-auto"
+      className="bg-white rounded-3xl  w-full border shadow-sm border-gray-100 p-6 lg:p-8  mx-auto"
     >
       <div className="flex items-center mb-8">
         <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full mr-3 shadow-sm"></div>
@@ -142,8 +173,9 @@ const ExerciseForm = ({
               type="text"
               value={safeExercise.name}
               onChange={(e) => handleChange('name', e.target.value)}
+              onBlur={() => handleFieldBlur('name')}
               className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-100 ${
-                errors.exerciseName 
+                shouldShowError('exerciseName') 
                   ? 'border-red-400 bg-red-50' 
                   : 'border-gray-200 hover:border-gray-300 focus:border-blue-500'
               } ${isLoading ? 'opacity-50' : ''}`}
@@ -151,7 +183,7 @@ const ExerciseForm = ({
               disabled={isLoading}
             />
             <AnimatePresence>
-              {errors.exerciseName && (
+              {shouldShowError('exerciseName') && (
                 <motion.p
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -175,8 +207,9 @@ const ExerciseForm = ({
                 max="300"
                 value={durationInMinutes}
                 onChange={(e) => handleChange('duration', (parseInt(e.target.value) || 0) * 60)}
+                onBlur={() => handleFieldBlur('duration')}
                 className={`w-full px-4 py-3 pr-12 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-100 ${
-                  errors.duration 
+                  shouldShowError('duration') 
                     ? 'border-red-400 bg-red-50' 
                     : 'border-gray-200 hover:border-gray-300 focus:border-blue-500'
                 }`}
@@ -185,6 +218,18 @@ const ExerciseForm = ({
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">min</span>
             </div>
+            <AnimatePresence>
+              {shouldShowError('duration') && (
+                <motion.p
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center text-red-600 text-sm mt-2"
+                >
+                  <FaExclamationCircle className="mr-1" /> {errors.duration}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -267,11 +312,24 @@ const ExerciseForm = ({
                     max="100"
                     value={safeExercise.reps}
                     onChange={(e) => handleChange('reps', parseInt(e.target.value) || 0)}
+                    onBlur={() => handleFieldBlur('reps')}
                     className={`w-full px-4 py-3 rounded-xl border-2 transition-all focus:ring-4 focus:ring-blue-100 ${
-                      errors.reps ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-gray-300 focus:border-blue-500'
+                      shouldShowError('reps') ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-gray-300 focus:border-blue-500'
                     }`}
                     disabled={isLoading}
                   />
+                  <AnimatePresence>
+                    {shouldShowError('reps') && (
+                      <motion.p
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="flex items-center text-red-600 text-sm mt-2"
+                      >
+                        <FaExclamationCircle className="mr-1" /> {errors.reps}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
@@ -307,7 +365,14 @@ const ExerciseForm = ({
           <label className="text-sm font-semibold text-gray-700 mb-3 block">Mídia Demonstrativa</label>
           {!safeExercise.mediaFile ? (
             <label className="flex flex-col items-center justify-center w-full h-48 border-3 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all group">
-              <input type="file" accept="image/*,video/*" onChange={handleMediaUpload} className="hidden" disabled={isLoading} />
+              <input 
+                type="file" 
+                accept="image/*,video/*" 
+                onChange={handleMediaUpload} 
+                className="hidden" 
+                disabled={isLoading}
+                ref={fileInputRef}
+              />
               <FaUpload className="text-4xl text-gray-400 group-hover:text-blue-500 transition-colors mb-3" />
               <p className="text-gray-600 font-medium">Clique para fazer upload</p>
               <p className="text-xs text-gray-500 mt-1">PNG, JPG, GIF, MP4, WEBM • até 50MB</p>
@@ -367,7 +432,11 @@ const ExerciseForm = ({
               <FaUndo className="mr-2" /> Cancelar
             </button>
           )}
-          <button type="submit" disabled={isLoading} className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:transform-none flex items-center justify-center">
+          <button 
+            type="submit" 
+            disabled={isLoading || Object.keys(errors).length > 0}
+            className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed flex items-center justify-center"
+          >
             {isLoading ? <FaSpinner className="animate-spin mr-2" /> : React.createElement(submitButtonIcon, { className: "mr-2" })}
             {isLoading ? 'Processando...' : submitButtonText}
           </button>

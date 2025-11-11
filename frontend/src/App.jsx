@@ -1,64 +1,89 @@
-// src/App.js
+// src/App.js - ATUALIZADO
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import AdminPanel from './pages/admin/AdminPanel';
-import ActiveWorkout from './components/workout/ActiveWorkout';
+import ViewerWorkoutList from './components/workout/ViewerWorkoutList'; // ✅ NOVO COMPONENTE
+import AccessDenied from './components/auth/AccessDenied';
 import { useAuthStore } from './services/authService';
 import AuthService from './services/authService';
+import LoadingScreen from './components/ui/LoadingScreen';
 import './index.css';
+
+// Helper para verificar se é admin
+const isAdminUser = (user) => {
+  return user && (user.role === 'super_admin' || user.role === 'admin');
+};
+
+// Helper para verificar se é viewer
+const isViewerUser = (user) => {
+  return user && user.role === 'viewer';
+};
 
 function App() {
   const user = useAuthStore((state) => state.user);
   const isCheckingAuth = useAuthStore((state) => state.isCheckingAuth);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initializationError, setInitializationError] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Verificando autenticação...");
 
   const isAuthenticated = !!user;
+  const isAdmin = isAdminUser(user);
+  const isViewer = isViewerUser(user);
 
   // Verificar autenticação ao carregar o app
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Timeout para inicialização
+        setLoadingMessage("Verificando autenticação...");
+        
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Timeout na inicialização')), 15000)
         );
 
+        setLoadingMessage("Conectando ao servidor...");
         await Promise.race([AuthService.checkAuth(), timeoutPromise]);
+        
+        setLoadingMessage("Carregando configurações...");
+        
+        if (isAuthenticated) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
         setInitializationError(false);
       } catch (error) {
         console.error('Erro ao inicializar autenticação:', error);
         setInitializationError(true);
-        // Garante que a aplicação não fique travada
         useAuthStore.getState().setCheckingAuth(false);
       } finally {
         setIsInitialized(true);
       }
     };
 
-    initializeAuth();
-  }, []);
+    if (!isInitialized) {
+      initializeAuth();
+    }
+  }, [isAuthenticated, isInitialized]);
+
+  // Determina a rota padrão baseada no role
+  const getDefaultRoute = () => {
+    if (!isAuthenticated) return '/login';
+    if (isAdmin) return '/admin';
+    if (isViewer) return '/workout';
+    return '/login';
+  };
 
   // Loading enquanto verifica
   if (!isInitialized || isCheckingAuth) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="loading loading-spinner loading-lg text-primary"></div>
-          <p className="mt-4 text-gray-600">Verificando autenticação...</p>
-          {initializationError && (
-            <p className="mt-2 text-sm text-orange-600">
-              Problema de conexão. Tentando novamente...
-            </p>
-          )}
-        </div>
-      </div>
+      <LoadingScreen 
+        message={loadingMessage}
+        showError={initializationError}
+      />
     );
   }
 
-  // Se houve erro na inicialização mas já finalizou, mostra a app normalmente
   return (
     <Router>
       <div className="App">
@@ -66,31 +91,47 @@ function App() {
           {/* Rotas Públicas */}
           <Route
             path="/login"
-            element={isAuthenticated ? <Navigate to="/admin" replace /> : <Login />}
+            element={isAuthenticated ? <Navigate to={getDefaultRoute()} replace /> : <Login />}
           />
           <Route
             path="/register"
-            element={isAuthenticated ? <Navigate to="/admin" replace /> : <Register />}
+            element={isAuthenticated ? <Navigate to={getDefaultRoute()} replace /> : <Register />}
           />
 
-          {/* Rotas Protegidas */}
+          {/* Rotas do Admin - APENAS para admin/super_admin */}
           <Route
             path="/admin/*"
-            element={isAuthenticated ? <AdminPanel /> : <Navigate to="/login" replace />}
+            element={
+              isAuthenticated && isAdmin 
+                ? <AdminPanel /> 
+                : <AccessDenied />
+            }
           />
+
+          {/* Rota de Workout - PARA TODOS OS USUÁRIOS AUTENTICADOS */}
           <Route
             path="/workout"
-            element={isAuthenticated ? <ActiveWorkout /> : <Navigate to="/login" replace />}
+            element={
+              isAuthenticated 
+                ? <ViewerWorkoutList /> // ✅ AGORA USA O VIEWERWORKOUTLIST
+                : <Navigate to="/login" replace />
+            }
           />
 
-          {/* Rota Padrão */}
+          {/* Rota de Access Denied */}
+          <Route
+            path="/access-denied"
+            element={<AccessDenied />}
+          />
+
+          {/* Rota Padrão - Redireciona baseado no role */}
           <Route
             path="/"
-            element={<Navigate to={isAuthenticated ? "/admin" : "/login"} replace />}
+            element={<Navigate to={getDefaultRoute()} replace />}
           />
 
-          {/* 404 */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* 404 - Redireciona para rota apropriada */}
+          <Route path="*" element={<Navigate to={getDefaultRoute()} replace />} />
         </Routes>
       </div>
     </Router>

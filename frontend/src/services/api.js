@@ -8,51 +8,26 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // REMOVA O Content-Type global!
 });
 
-// === REFRESH TOKEN CONTROL ===
-let isRefreshing = false;
-let failedQueue = [];
+// === INTERCEPTOR: Remove Content-Type quando for FormData ===
+api.interceptors.request.use(config => {
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']; // Deixa o Axios definir com boundary
+  }
+  return config;
+}, error => Promise.reject(error));
 
-const processQueue = (error, token = null) => {
-  failedQueue.forEach(prom => {
-    error ? prom.reject(error) : prom.resolve(token);
-  });
-  failedQueue = [];
-};
-
-// === REQUEST INTERCEPTOR ===
-api.interceptors.request.use(
-  (config) => {
-    console.log('Request:', config.method?.toUpperCase(), config.url);
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// === RESPONSE INTERCEPTOR CORRIGIDO ===
+// === RESPONSE INTERCEPTOR (mantido) ===
 api.interceptors.response.use(
-  (response) => {
-    console.log('Response:', response.status);
-    return response.data;
-  },
-  async (error) => {
+  response => response.data,
+  async error => {
     const originalRequest = error.config;
 
-    // Evita processar erro sem response (timeout, etc)
-    if (!error.response) {
-      return Promise.reject(error);
-    }
+    if (!error.response) return Promise.reject(error);
 
-    console.log('Error:', error.response?.status, error.response?.data?.message);
-
-    // Se for 401 e não for uma tentativa de refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      
-      // Evita múltiplos refresh tokens simultâneos
+    if (error.response.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -70,7 +45,6 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError);
-        // Não faz logout automático aqui - deixa o checkAuth lidar
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -81,5 +55,15 @@ api.interceptors.response.use(
     return Promise.reject(new Error(message));
   }
 );
+
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    error ? prom.reject(error) : prom.resolve(token);
+  });
+  failedQueue = [];
+};
 
 export default api;

@@ -1,4 +1,4 @@
-// models/Company.model.js
+// models/Company.model.js - VERSÃO ATUALIZADA
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 
@@ -28,10 +28,38 @@ const companySchema = new mongoose.Schema({
     required: [true, 'Senha é obrigatória']
   },
 
+  // NOVAS CONFIGURAÇÕES ADICIONADAS
+  slogan: {
+    type: String,
+    default: 'Treine com propósito'
+  },
+
+  logo: {
+    url: String,
+    publicId: String
+  },
+
+  theme: {
+    primaryColor: { type: String, default: '#3B82F6' },
+    secondaryColor: { type: String, default: '#1E40AF' }
+  },
+
+  contact: {
+    email: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    address: { type: String, default: '' }
+  },
+
+  social: {
+    instagram: { type: String, default: '' },
+    facebook: { type: String, default: '' },
+    whatsapp: { type: String, default: '' }
+  },
+
   settings: {
     maxUsers: { type: Number, default: 5 },
-    theme: { type: String, default: 'corporate' },
-    language: { type: String, default: 'pt-BR' }
+    language: { type: String, default: 'pt-BR' },
+    timezone: { type: String, default: 'America/Sao_Paulo' }
   },
 
   // Plano e Faturamento
@@ -43,7 +71,8 @@ const companySchema = new mongoose.Schema({
 
   billing: {
     status: { type: String, enum: ['active', 'pending', 'canceled'], default: 'active' },
-    nextBillingDate: Date
+    nextBillingDate: Date,
+    stripeCustomerId: String
   },
 
   status: {

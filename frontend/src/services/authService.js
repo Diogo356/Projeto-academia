@@ -1,4 +1,4 @@
-// src/services/authService.js
+// src/services/authService.js - ATUALIZADO
 import { create } from 'zustand';
 import api from './api';
 import toast from 'react-hot-toast';
@@ -22,6 +22,20 @@ export const useAuthStore = create((set) => ({
   },
 
   setCheckingAuth: (checking) => set({ isCheckingAuth: checking }),
+
+  // NOVO: Atualizar apenas as configurações da empresa
+  updateCompanySettings: (settings) => set((state) => ({
+    company: state.company ? { ...state.company, ...settings } : null
+  })),
+
+  // NOVO: Atualizar apenas o plano da empresa
+  updateCompanyPlan: (plan, maxUsers) => set((state) => ({
+    company: state.company ? { 
+      ...state.company, 
+      plan,
+      settings: { ...state.company.settings, maxUsers }
+    } : null
+  }))
 }));
 
 // === AUTH SERVICE ===
@@ -131,8 +145,6 @@ class AuthService {
           throw new Error('Resposta não sucedida');
         }
       } catch (error) {
-        console.log('Erro na verificação de auth:', error.message);
-        
         // Se for 401, tenta refresh token
         if (error.response?.status === 401) {
           try {
@@ -147,7 +159,6 @@ class AuthService {
               throw new Error('Falha no retry');
             }
           } catch (refreshError) {
-            console.log('Refresh token falhou:', refreshError.message);
             this.clearAuthSilently();
             resolve(false);
           }
@@ -175,10 +186,29 @@ class AuthService {
     return !!useAuthStore.getState().user;
   }
 
-  getCurrentUser() { return useAuthStore.getState().user; }
-  getCurrentCompany() { return useAuthStore.getState().company; }
-  get isLoading() { return useAuthStore.getState().isLoading; }
-  get isCheckingAuth() { return useAuthStore.getState().isCheckingAuth; }
+  getCurrentUser() { 
+    return useAuthStore.getState().user; 
+  }
+  
+  getCurrentCompany() { 
+    return useAuthStore.getState().company; 
+  }
+  
+  get isLoading() { 
+    return useAuthStore.getState().isLoading; 
+  }
+  
+  get isCheckingAuth() { 
+    return useAuthStore.getState().isCheckingAuth; 
+  }
+
+  // NOVO: Método para atualizar company no store
+  updateCompanyInStore(companyData) {
+    const store = useAuthStore.getState();
+    if (store.company) {
+      store.setAuth(store.user, { ...store.company, ...companyData });
+    }
+  }
 }
 
 export default new AuthService();

@@ -5,10 +5,13 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cookieParser from 'cookie-parser';
+import fileUpload from 'express-fileupload';
 dotenv.config();
 
 import authRoutes from './src/routes/auth.route.js'
 import workoutRoutes from './src/routes/workouts.route.js';
+import companySettinsgsRoutes from './src/routes/companySettings.route.js';
+import userRoutes from './src/routes/users.route.js';
 
 const app = express();
 const server = createServer(app);
@@ -29,6 +32,11 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json());
 
+app.use(fileUpload({
+  limits: { fileSize: 2 * 1024 * 1024 },
+  abortOnLimit: true,
+}));
+
 // Conexão com MongoDB
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/academia', {
   useNewUrlParser: true,
@@ -37,34 +45,12 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/academia'
 .then(() => console.log('✅ Conectado ao MongoDB'))
 .catch(err => console.log('❌ Erro MongoDB:', err));
 
-// Socket.IO
-io.on('connection', (socket) => {
-  console.log('🔌 Usuário conectado:', socket.id);
-  
-  // Exemplo: enviar usuários online
-  socket.on('userOnline', (userId) => {
-    socket.join(userId);
-    console.log(`👤 Usuário ${userId} online`);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('🔌 Usuário desconectado:', socket.id);
-  });
-});
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/workouts', workoutRoutes);
-// Rota de saúde
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'API Academia funcionando!',
-    timestamp: new Date().toISOString()
-  });
-});
+app.use('/api/company/settings', companySettinsgsRoutes);
+app.use('/api/users', userRoutes);
 
-// Rota padrão
 app.get('/', (req, res) => {
   res.json({ message: 'Bem-vindo à API Academia' });
 });

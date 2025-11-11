@@ -100,8 +100,8 @@ export const registerCompany = async (req, res) => {
       success: true,
       message: 'Cadastro realizado com sucesso',
       data: {
-        company: { publicId: company.publicId, name: company.name, email: company.email, plan: company.plan },
-        user: { publicId: adminUser.publicId, name: adminUser.name, email: adminUser.email, role: adminUser.role }
+        company: { publicId: company?.publicId, name: company?.name, email: company?.email, plan: company?.plan },
+        user: { publicId: adminUser?.publicId, name: adminUser?.name, email: adminUser?.email, role: adminUser?.role }
       }
     });
 
@@ -111,41 +111,86 @@ export const registerCompany = async (req, res) => {
   }
 };
 
-// === LOGIN ===
+// controllers/auth.controller.js - CORREÇÃO NO LOGIN
 export const loginCompany = async (req, res) => {
   try {
     const { email, password } = req.body;
     const deviceInfo = { userAgent: req.get('User-Agent'), ip: req.ip };
 
-    const company = await Company.findOne({ email });
-    if (!company || !(await bcrypt.compare(password, company.password))) {
+    console.log('🔐 Tentativa de login:', email);
+
+    // Buscar usuário pelo email (não mais pela company)
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      console.log('❌ Usuário não encontrado:', email);
       return res.status(401).json({ success: false, message: 'Credenciais inválidas' });
     }
 
-    const user = await User.findOne({ companyPublicId: company.publicId, role: 'super_admin' });
-    if (!user) return res.status(401).json({ success: false, message: 'Usuário admin não encontrado' });
-    if (user.isLocked) return res.status(423).json({ success: false, message: 'Conta bloqueada' });
+    // Verificar senha
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      console.log('❌ Senha inválida para:', email);
+      
+      // Incrementar tentativas de login
+      await user.incrementLoginAttempts();
+      
+      return res.status(401).json({ success: false, message: 'Credenciais inválidas' });
+    }
 
+    // Verificar se conta está bloqueada
+    if (user.isLocked) {
+      console.log('❌ Conta bloqueada:', email);
+      return res.status(423).json({ success: false, message: 'Conta bloqueada' });
+    }
+
+    // Buscar empresa do usuário
+    const company = await Company.findOne({ publicId: user.companyPublicId });
+    if (!company) {
+      console.log('❌ Empresa não encontrada para usuário:', email);
+      return res.status(401).json({ success: false, message: 'Empresa não encontrada' });
+    }
+
+    console.log('✅ Credenciais válidas para:', email, 'Role:', user.role);
+
+    // Gerar tokens
     const { accessToken, refreshToken, refreshTokenJWT } = generateTokens(user, company);
+    
+    // Adicionar refresh token
     await user.addRefreshToken(refreshToken, deviceInfo);
 
+    // Atualizar último login e resetar tentativas
     user.lastLogin = new Date();
     await user.resetLoginAttempts();
     await user.save();
 
+    // Setar cookies
     setAuthCookies(res, accessToken, refreshTokenJWT);
 
+    // Response
     res.json({
       success: true,
       message: 'Login realizado com sucesso',
       data: {
-        company: { publicId: company.publicId, name: company.name, email: company.email, plan: company.plan, settings: company.settings },
-        user: { publicId: user.publicId, name: user.name, email: user.email, role: user.role, permissions: user.permissions }
+        company: { 
+          publicId: company.publicId, 
+          name: company.name, 
+          email: company.email, 
+          plan: company.plan, 
+          settings: company.settings 
+        },
+        user: { 
+          publicId: user.publicId, 
+          name: user.name, 
+          email: user.email, 
+          role: user.role, 
+          permissions: user.permissions 
+        }
       }
     });
 
   } catch (error) {
-    console.error('Erro no login:', error);
+    console.error('❌ Erro no login:', error);
     res.status(500).json({ success: false, message: 'Erro interno do servidor' });
   }
 };
@@ -203,7 +248,7 @@ export const refreshToken = async (req, res) => {
       success: true,
       message: 'Token renovado',
       data: {
-        user: { publicId: user.publicId, name: user.name, email: user.email, role: user.role }
+        user: { publicId: user?.publicId, name: user?.name, email: user?.email, role: user?.role }
       }
     });
 
@@ -257,8 +302,8 @@ export const getCurrentUser = async (req, res) => {
     res.json({
       success: true,
       data: {
-        user: { publicId: user.publicId, name: user.name, email: user.email, role: user.role, permissions: user.permissions, lastLogin: user.lastLogin },
-        company: { publicId: company.publicId, name: company.name, email: company.email, plan: company.plan, settings: company.settings }
+        user: { publicId: user?.publicId, name: user?.name, email: user.email, role: user?.role, permissions: user?.permissions, lastLogin: user?.lastLogin },
+        company: { publicId: company?.publicId, name: company?.name, email: company?.email, plan: company?.plan, settings: company?.settings }
       }
     });
 
@@ -268,20 +313,85 @@ export const getCurrentUser = async (req, res) => {
   }
 };
 
-export const verifyAccessToken = (req, res, next) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json({ success: false, message: 'Acesso negado' });
+// export const verifyAccessToken = async (req, res, next) => {
+//   try {
+//     // Verificar token no cookie primeiro
+//     let token = req.cookies.access_token;
+    
+//     // Se não tiver no cookie, verificar no header Authorization
+//     if (!token && req.headers.authorization) {
+//       const authHeader = req.headers.authorization;
+//       if (authHeader.startsWith('Bearer ')) {
+//         token = authHeader.substring(7);
+//       }
+//     }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.type !== 'access') throw new Error();
-    req.user = decoded;
-    next();
-  } catch (error) {
-    res.status(401).json({ success: false, message: 'Token inválido ou expirado' });
-  }
-};
+//     if (!token) {
+//       return res.status(401).json({ 
+//         success: false, 
+//         message: 'Token de acesso não fornecido' 
+//       });
+//     }
 
+//     // Verificar e decodificar o token
+//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+//     if (decoded.type !== 'access') {
+//       return res.status(401).json({ 
+//         success: false, 
+//         message: 'Tipo de token inválido' 
+//       });
+//     }
+
+//     // Buscar usuário no banco para verificar se ainda existe
+//     const user = await User.findOne({ 
+//       publicId: decoded.userPublicId,
+//       isLocked: false 
+//     }).select('publicId companyPublicId name email role');
+
+//     if (!user) {
+//       return res.status(401).json({ 
+//         success: false, 
+//         message: 'Usuário não encontrado ou bloqueado' 
+//       });
+//     }
+
+//     // Adicionar usuário à requisição no formato CORRETO para o workout
+//     req.user = {
+//       publicId: user.publicId,           // Para workout.controller
+//       userPublicId: user.publicId,       // Para compatibilidade com outros controllers
+//       companyPublicId: user.companyPublicId,
+//       name: user?.name,
+//       email: user.email,
+//       role: user.role
+//     };
+
+//     next();
+//   } catch (error) {
+//     console.error('❌ Erro na verificação do token:', error);
+    
+//     if (error.name === 'TokenExpiredError') {
+//       return res.status(401).json({ 
+//         success: false, 
+//         message: 'Token expirado' 
+//       });
+//     }
+    
+//     if (error.name === 'JsonWebTokenError') {
+//       return res.status(401).json({ 
+//         success: false, 
+//         message: 'Token inválido' 
+//       });
+//     }
+
+//     return res.status(500).json({ 
+//       success: false, 
+//       message: 'Erro interno do servidor' 
+//     });
+//   }
+// };
+
+// === VERIFY REFRESH TOKEN ===
 export const verifyRefreshToken = (req, res, next) => {
   const token = req.body.refreshToken || req.cookies.refresh_token;
   if (!token) return res.status(401).json({ success: false, message: 'Refresh token obrigatório' });
@@ -296,6 +406,7 @@ export const verifyRefreshToken = (req, res, next) => {
   }
 };
 
+// === GET ACTIVE SESSIONS ===
 export const getActiveSessions = async (req, res) => {
   try {
     const userPublicId = req.user?.userPublicId;
@@ -315,5 +426,108 @@ export const getActiveSessions = async (req, res) => {
   } catch (error) {
     console.error('Erro nas sessões:', error);
     res.status(500).json({ success: false, message: 'Erro interno' });
+  }
+};
+
+// === MIDDLEWARE DE DESENVOLVIMENTO (OPCIONAL) ===
+export const verifyAccessTokenDev = async (req, res, next) => {
+  // Para desenvolvimento - permite testar sem token
+  if (process.env.NODE_ENV === 'development') {
+    req.user = {
+      publicId: 'dev-user-public-id',
+      userPublicId: 'dev-user-public-id',
+      companyPublicId: 'dev-company-public-id',
+      name: 'Developer User',
+      email: 'dev@example.com',
+      role: 'super_admin'
+    };
+
+    return next();
+  }
+  
+  // Para produção, usar o verifyAccessToken normal
+  return verifyAccessToken(req, res, next);
+};
+
+
+// === VERIFY ACCESS TOKEN - CORRIGIDO ===
+export const verifyAccessToken = async (req, res, next) => {
+  try {
+    // Verificar token no cookie primeiro
+    let token = req.cookies.access_token;
+    
+    // Se não tiver no cookie, verificar no header Authorization
+    if (!token && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+
+    if (!token) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Token de acesso não fornecido' 
+      });
+    }
+
+    // Verificar e decodificar o token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    if (decoded.type !== 'access') {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Tipo de token inválido' 
+      });
+    }
+
+    // Buscar usuário no banco para verificar se ainda existe
+    const user = await User.findOne({ 
+      publicId: decoded.userPublicId,
+      isLocked: false 
+    }).select('publicId companyPublicId name email role');
+
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Usuário não encontrado ou bloqueado' 
+      });
+    }
+
+    // ✅ CORREÇÃO: ADICIONAR companyPublicId À REQUISIÇÃO
+    req.companyPublicId = user.companyPublicId; // <--- ESTA LINHA ESTÁ FALTANDO!
+    
+    // Adicionar usuário à requisição no formato CORRETO para o workout
+    req.user = {
+      publicId: user.publicId,           // Para workout.controller
+      userPublicId: user.publicId,       // Para compatibilidade com outros controllers
+      companyPublicId: user.companyPublicId,
+      name: user?.name,
+      email: user.email,
+      role: user.role
+    };
+
+    next();
+  } catch (error) {
+    console.error('❌ Erro na verificação do token:', error);
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Token expirado' 
+      });
+    }
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Token inválido' 
+      });
+    }
+
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Erro interno do servidor' 
+    });
   }
 };

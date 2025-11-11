@@ -1,114 +1,366 @@
 // src/components/admin/WorkoutList.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FaPlus, FaTrash, FaCopy, FaEye, 
+  FaSpinner, FaExclamationTriangle, FaDumbbell,
+  FaClock, FaFire, FaHeartbeat, FaUser, 
+  FaSnowflake, FaRunning, FaEdit,
+  FaCheck, FaTimes
+} from 'react-icons/fa';
+import workoutService from '../../../../services/workoutService';
+import WorkoutViewModal from './WorkoutViewModal';
 
 const WorkoutList = () => {
-  const [workouts, setWorkouts] = useState([
-    // Exemplo de treinos salvos
-    {
-      id: 1,
-      name: 'Treino Cardio Avançado',
-      category: 'cardio',
-      difficulty: 'advanced',
-      totalDuration: 3600,
-      exerciseCount: 4,
-      created: '2024-01-15'
-    }
-  ]);
+  const [workouts, setWorkouts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [actionStatus, setActionStatus] = useState({ type: '', message: '' });
+  const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const deleteWorkout = (id) => {
-    if (window.confirm('Tem certeza que deseja excluir este treino?')) {
-      setWorkouts(prev => prev.filter(workout => workout.id !== id));
+  // Ícones para categorias
+  const categoryIcons = {
+    cardio: FaRunning,
+    strength: FaDumbbell,
+    hiit: FaFire,
+    yoga: FaUser,
+    pilates: FaHeartbeat,
+    mobility: FaSnowflake,
+    custom: FaDumbbell
+  };
+
+  // Buscar treinos do back-end
+  const fetchWorkouts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await workoutService.getWorkouts();
+      const workoutsData = response.workouts || [];
+      
+      setWorkouts(workoutsData);
+      
+    } catch (err) {
+      console.error('❌ Erro ao buscar treinos:', err);
+      setError(err.message || 'Erro ao carregar treinos');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const duplicateWorkout = (workout) => {
-    const newWorkout = {
-      ...workout,
-      id: Date.now(),
-      name: `${workout.name} (Cópia)`,
-      created: new Date().toISOString().split('T')[0]
+  // Carregar treinos ao montar o componente
+  useEffect(() => {
+    fetchWorkouts();
+  }, []);
+
+  // Função para abrir o modal de visualização
+  const openWorkoutModal = (workout) => {
+    setSelectedWorkout(workout);
+    setIsModalOpen(true);
+  };
+
+  // Função para fechar o modal
+  const closeWorkoutModal = () => {
+    setIsModalOpen(false);
+    setSelectedWorkout(null);
+  };
+
+  // Deletar treino
+  const deleteWorkout = async (publicId, workoutName) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o treino "${workoutName}"?`)) {
+      return;
+    }
+
+    try {
+      await workoutService.deleteWorkout(publicId);
+      setWorkouts(prev => prev.filter(workout => workout.publicId !== publicId));
+      
+      setActionStatus({
+        type: 'success',
+        message: 'Treino deletado com sucesso!'
+      });
+      
+    } catch (err) {
+      console.error('Erro ao deletar treino:', err);
+      setActionStatus({
+        type: 'error',
+        message: 'Erro ao deletar treino: ' + err.message
+      });
+    } finally {
+      setTimeout(() => setActionStatus({ type: '', message: '' }), 3000);
+    }
+  };
+
+  // Duplicar treino
+  const duplicateWorkout = async (workout) => {
+    try {
+      const workoutData = {
+        name: `${workout.name} (Cópia)`,
+        description: workout.description || '',
+        category: workout.category || 'custom',
+        difficulty: workout.difficulty || 'intermediate',
+        exercises: workout.exercises || []
+      };
+
+      const response = await workoutService.createWorkout(workoutData);
+      setWorkouts(prev => [response.workout, ...prev]);
+      
+      setActionStatus({
+        type: 'success',
+        message: 'Treino duplicado com sucesso!'
+      });
+      
+    } catch (err) {
+      console.error('Erro ao duplicar treino:', err);
+      setActionStatus({
+        type: 'error',
+        message: 'Erro ao duplicar treino: ' + err.message
+      });
+    } finally {
+      setTimeout(() => setActionStatus({ type: '', message: '' }), 3000);
+    }
+  };
+
+  // Formatar data
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  // Formatar duração
+  const formatDuration = (seconds) => {
+    if (!seconds) return '0 min';
+    
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}min`;
+    }
+    return `${minutes} min`;
+  };
+
+  // Traduzir categoria
+  const translateCategory = (category) => {
+    const translations = {
+      cardio: 'Cardio',
+      strength: 'Força',
+      hiit: 'HIIT',
+      yoga: 'Yoga',
+      pilates: 'Pilates',
+      mobility: 'Mobilidade',
+      custom: 'Personalizado'
     };
-    setWorkouts(prev => [...prev, newWorkout]);
+    return translations[category] || category;
   };
+
+  // Traduzir dificuldade
+  const translateDifficulty = (difficulty) => {
+    const translations = {
+      beginner: 'Iniciante',
+      intermediate: 'Intermediário',
+      advanced: 'Avançado'
+    };
+    return translations[difficulty] || difficulty;
+  };
+
+  // Obter cor da dificuldade
+  const getDifficultyColor = (difficulty) => {
+    const colors = {
+      beginner: 'green',
+      intermediate: 'yellow', 
+      advanced: 'red'
+    };
+    return colors[difficulty] || 'gray';
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="text-gray-600 mt-4">Carregando treinos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Meus Treinos</h2>
-        <button className="btn btn-primary">
-          ➕ Novo Treino
-        </button>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <FaDumbbell className="text-blue-600" />
+            Meus Treinos
+          </h2>
+          <p className="text-gray-600 mt-2">
+            Gerencie e organize seus treinos personalizados
+          </p>
+        </div>
       </div>
 
-      {workouts.length === 0 ? (
-        <div className="text-center py-12">
+      {/* Status Message */}
+      <AnimatePresence>
+        {actionStatus.message && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`p-4 rounded-2xl border-2 flex items-center space-x-3 ${
+              actionStatus.type === 'success'
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : 'bg-red-50 border-red-200 text-red-800'
+            }`}
+          >
+            {actionStatus.type === 'success' ? (
+              <FaCheck className="text-green-500 text-xl" />
+            ) : (
+              <FaTimes className="text-red-500 text-xl" />
+            )}
+            <span className="font-medium">{actionStatus.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {error ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center"
+        >
+          <FaExclamationTriangle className="text-red-500 text-4xl mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-red-800 mb-2">Erro ao carregar treinos</h3>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={fetchWorkouts}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Tentar Novamente
+          </button>
+        </motion.div>
+      ) : workouts.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-3xl shadow-lg border border-gray-100 p-12 text-center"
+        >
           <div className="text-6xl mb-4">🏋️‍♂️</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">
             Nenhum treino criado ainda
           </h3>
-          <p className="text-gray-600 mb-4">
-            Comece criando seu primeiro treino personalizado
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            Comece criando seu primeiro treino personalizado para ver ele aqui.
           </p>
-          <button className="btn btn-primary">
-            Criar Primeiro Treino
+          <button 
+            onClick={() => window.location.href = '/admin/create'}
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:shadow-lg transform hover:scale-105 transition-all flex items-center space-x-2 mx-auto"
+          >
+            <FaPlus />
+            <span>Criar Primeiro Treino</span>
           </button>
-        </div>
+        </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {workouts.map(workout => (
-            <div key={workout.id} className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="font-bold text-gray-900 text-lg">{workout.name}</h3>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  workout.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
-                  workout.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {workout.difficulty === 'beginner' ? 'Iniciante' :
-                   workout.difficulty === 'intermediate' ? 'Intermediário' : 'Avançado'}
-                </span>
-              </div>
+        <motion.div
+          layout
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
+          <AnimatePresence>
+            {workouts.map((workout, index) => {
+              const CategoryIcon = categoryIcons[workout.category] || FaDumbbell;
+              const difficultyColor = getDifficultyColor(workout.difficulty);
               
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Categoria:</span>
-                  <span className="font-medium capitalize">{workout.category}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Duração:</span>
-                  <span className="font-medium">{Math.floor(workout.totalDuration / 60)}min</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Exercícios:</span>
-                  <span className="font-medium">{workout.exerciseCount}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Criado em:</span>
-                  <span className="font-medium">{workout.created}</span>
-                </div>
-              </div>
+              return (
+                <motion.div
+                  key={workout.publicId || workout._id || index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300 group"
+                >
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-50 rounded-xl">
+                        <CategoryIcon className="text-blue-600 text-xl" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-blue-600 transition-colors">
+                          {workout.name}
+                        </h3>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          difficultyColor === 'green' ? 'bg-green-100 text-green-800' :
+                          difficultyColor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {translateDifficulty(workout.difficulty)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Informações */}
+                  <div className="space-y-3 mb-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <FaClock className="mr-2 text-gray-400" />
+                      <span>{formatDuration(workout.totalDuration)}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <FaDumbbell className="mr-2 text-gray-400" />
+                      <span>{(workout.exercises && workout.exercises.length) || 0} exercícios</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <span className="mr-2">🏷️</span>
+                      <span>{translateCategory(workout.category)}</span>
+                    </div>
+                    {workout.description && (
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {workout.description}
+                      </p>
+                    )}
+                    <div className="text-xs text-gray-500">
+                      Criado em {formatDate(workout.createdAt)}
+                    </div>
+                  </div>
 
-              <div className="flex space-x-2">
-                <button className="btn btn-sm btn-outline flex-1">
-                  👁️ Visualizar
-                </button>
-                <button 
-                  onClick={() => duplicateWorkout(workout)}
-                  className="btn btn-sm btn-outline"
-                >
-                  📋
-                </button>
-                <button 
-                  onClick={() => deleteWorkout(workout.id)}
-                  className="btn btn-sm btn-outline text-red-600"
-                >
-                  🗑️
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+                  {/* Ações */}
+                  <div className="flex space-x-2 pt-4 border-t border-gray-100">
+                    <button 
+                      onClick={() => openWorkoutModal(workout)}
+                      className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center justify-center space-x-1 text-sm font-medium"
+                    >
+                      <FaEye className="text-xs" />
+                      <span>Visualizar</span>
+                    </button>
+                    <button 
+                      onClick={() => duplicateWorkout(workout)}
+                      className="px-3 py-2 bg-gray-50 text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 hover:border-gray-300 transition-colors flex items-center justify-center"
+                      title="Duplicar treino"
+                    >
+                      <FaCopy className="text-sm" />
+                    </button>
+                    <button 
+                      onClick={() => deleteWorkout(workout.publicId, workout.name)}
+                      className="px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-colors flex items-center justify-center"
+                      title="Excluir treino"
+                    >
+                      <FaTrash className="text-sm" />
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </motion.div>
       )}
+
+      {/* Modal de Visualização */}
+      <WorkoutViewModal
+        workout={selectedWorkout}
+        isOpen={isModalOpen}
+        onClose={closeWorkoutModal}
+      />
     </div>
   );
 };

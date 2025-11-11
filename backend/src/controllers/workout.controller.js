@@ -74,6 +74,9 @@ export const createWorkout = async (req, res) => {
 
     await workout.save();
 
+    ('Treino salvo com sucesso:', workout);
+
+
     res.status(201).json({
       message: 'Treino criado com sucesso!',
       workout: {
