@@ -4,7 +4,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import AdminPanel from './pages/admin/AdminPanel';
-import ViewerWorkoutList from './components/workout/ViewerWorkoutList'; // ✅ NOVO COMPONENTE
+import ViewerWorkoutList from './components/workout/ViewerWorkoutList';
+import ActiveWorkout from './components/workout/ActiveWorkout'; // ✅ NOVO IMPORT
 import AccessDenied from './components/auth/AccessDenied';
 import { useAuthStore } from './services/authService';
 import AuthService from './services/authService';
@@ -108,12 +109,22 @@ function App() {
             }
           />
 
-          {/* Rota de Workout - PARA TODOS OS USUÁRIOS AUTENTICADOS */}
+          {/* Rota de Lista de Workouts - PARA TODOS OS USUÁRIOS AUTENTICADOS */}
           <Route
             path="/workout"
             element={
               isAuthenticated 
-                ? <ViewerWorkoutList /> // ✅ AGORA USA O VIEWERWORKOUTLIST
+                ? <ViewerWorkoutList />
+                : <Navigate to="/login" replace />
+            }
+          />
+
+          {/* ✅ NOVA ROTA: Workout Ativo */}
+          <Route
+            path="/workout/:publicId"
+            element={
+              isAuthenticated 
+                ? <ActiveWorkout />
                 : <Navigate to="/login" replace />
             }
           />

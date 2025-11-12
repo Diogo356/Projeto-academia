@@ -1,6 +1,7 @@
-// src/components/workout/ViewerWorkoutList.jsx
+// src/components/workout/ViewerWorkoutList.jsx - ATUALIZADO
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom'; // ✅ NOVO IMPORT
 import {
     FaSpinner, FaExclamationTriangle, FaDumbbell,
     FaClock, FaFire, FaHeartbeat, FaUser,
@@ -16,6 +17,7 @@ const ViewerWorkoutList = () => {
     const [error, setError] = useState(null);
     const [selectedWorkout, setSelectedWorkout] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const navigate = useNavigate(); // ✅ HOOK DE NAVEGAÇÃO
 
     // Ícones para categorias
     const categoryIcons = {
@@ -52,7 +54,19 @@ const ViewerWorkoutList = () => {
         fetchWorkouts();
     }, []);
 
-    // Função para abrir o modal de visualização
+    // ✅ NOVA FUNÇÃO: Navegar para o treino ativo
+    const navigateToActiveWorkout = (workout) => {
+        if (workout.publicId) {
+            navigate(`/workout/${workout.publicId}`);
+        } else {
+            console.error('Workout sem publicId:', workout);
+            // Fallback: usar modal se não tiver publicId
+            setSelectedWorkout(workout);
+            setIsModalOpen(true);
+        }
+    };
+
+    // Função para abrir o modal de visualização (como fallback)
     const openWorkoutModal = (workout) => {
         setSelectedWorkout(workout);
         setIsModalOpen(true);
@@ -190,7 +204,7 @@ const ViewerWorkoutList = () => {
                                         exit={{ opacity: 0, y: -20 }}
                                         transition={{ delay: index * 0.1 }}
                                         className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300 group cursor-pointer"
-                                        onClick={() => openWorkoutModal(workout)}
+                                        onClick={() => navigateToActiveWorkout(workout)} // ✅ AGORA USA NAVEGAÇÃO
                                     >
                                         {/* Header */}
                                         <div className="flex justify-between items-start mb-4">
@@ -238,12 +252,12 @@ const ViewerWorkoutList = () => {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    openWorkoutModal(workout);
+                                                    navigateToActiveWorkout(workout); // ✅ AGORA USA NAVEGAÇÃO
                                                 }}
                                                 className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center justify-center space-x-1 text-sm font-medium"
                                             >
                                                 <FaEye className="text-xs" />
-                                                <span>Visualizar Treino</span>
+                                                <span>Iniciar Treino</span> {/* ✅ TEXTO ATUALIZADO */}
                                             </button>
                                         </div>
                                     </motion.div>
@@ -253,7 +267,7 @@ const ViewerWorkoutList = () => {
                     </motion.div>
                 )}
 
-                {/* Modal de Visualização */}
+                {/* Modal de Visualização (como fallback) */}
                 <WorkoutViewModal
                     workout={selectedWorkout}
                     isOpen={isModalOpen}
