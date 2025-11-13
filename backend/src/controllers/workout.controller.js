@@ -2,125 +2,9 @@
 import Workout from '../models/Workout.model.js';
 import { validationResult } from 'express-validator';
 import cloudinary from '../config/cloudinary.js';
-
-const uploadExerciseMediaToCloudinary = async (fileBuffer, originalName) => {
-  // Determina o tipo de recurso baseado na extensão do arquivo
-  const extension = originalName.split('.').pop().toLowerCase();
-  const isVideo = ['mp4', 'mov', 'avi', 'webm', 'mkv'].includes(extension);
-  const isGif = extension === 'gif';
-  
-  const resourceType = isVideo ? 'video' : (isGif ? 'image' : 'image');
-  
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'exercise-media',
-        resource_type: resourceType,
-        // Configurações para vídeos
-        ...(isVideo && {
-          format: 'mp4',
-          transformation: [
-            { width: 640, height: 360, crop: 'limit' },
-            { quality: 'auto' },
-            { fetch_format: 'mp4' }
-          ]
-        }),
-        // Configurações para GIFs
-        ...(isGif && {
-          format: 'gif',
-          transformation: [
-            { width: 400, height: 400, crop: 'limit' },
-            { quality: 'auto' }
-          ]
-        }),
-        // Configurações para imagens
-        ...(!isVideo && !isGif && {
-          format: 'webp',
-          transformation: [
-            { width: 400, height: 400, crop: 'limit' },
-            { quality: 'auto' },
-            { fetch_format: 'webp' }
-          ]
-        })
-      },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      }
-    );
-    uploadStream.end(fileBuffer);
-  });
-};
-
-// POST /api/workouts/upload-exercise-media - Upload de GIF/Video para exercícios
-export const uploadExerciseMedia = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'Nenhum arquivo enviado'
-      });
-    }
-
-    // Verificar tamanho do arquivo (limite de 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (req.file.size > maxSize) {
-      return res.status(400).json({
-        success: false,
-        message: 'Arquivo muito grande. Tamanho máximo: 10MB'
-      });
-    }
-
-    // Verificar tipo de arquivo
-    const allowedTypes = [
-      'image/gif',
-      'video/mp4',
-      'video/mov',
-      'video/avi',
-      'video/webm',
-      'video/quicktime',
-      'image/webp',
-      'image/jpeg',
-      'image/png'
-    ];
-
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tipo de arquivo não suportado. Use GIF, MP4, MOV, AVI, WebM, WebP, JPEG ou PNG'
-      });
-    }
-
-    // Fazer upload para o Cloudinary
-    const uploadResult = await uploadExerciseMediaToCloudinary(
-      req.file.buffer,
-      req.file.originalname
-    );
-
-    // Retornar URL do arquivo
-    res.json({
-      success: true,
-      data: {
-        url: uploadResult.secure_url,
-        publicId: uploadResult.public_id,
-        resourceType: uploadResult.resource_type,
-        format: uploadResult.format,
-        duration: uploadResult.duration, // Para vídeos
-        width: uploadResult.width,
-        height: uploadResult.height
-      }
-    });
-
-  } catch (error) {
-    console.error('Erro no upload de mídia:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor durante o upload'
-    });
-  }
-};
-
-
+import { uploadExerciseMediaToCloudinary, deleteFromCloudinary } from '../utils/cloudinary.utils.js';
+import { v4 as uuidv4 } from 'uuid';
+import multer from 'multer';
 
 
 
@@ -142,7 +26,7 @@ export const getWorkouts = async (req, res) => {
     const { page = 1, limit = 10, search } = req.query;
 
     const filter = { companyPublicId, isActive: true };
-    
+
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -155,20 +39,54 @@ export const getWorkouts = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit)
-      .select('publicId name description exercises totalDuration createdAt');
+      .select('publicId name description exercises totalDuration createdAt')
+      .lean(); // Usar lean() para melhor performance
+
+    // Processar os workouts para incluir informações das mídias
+    const processedWorkouts = workouts.map(workout => ({
+      publicId: workout.publicId,
+      name: workout.name,
+      description: workout.description,
+      totalDuration: workout.totalDuration,
+      exercisesCount: workout.exercises.length,
+      // Incluir apenas a primeira mídia como thumbnail (se existir)
+      thumbnail: workout.exercises.find(ex => ex.mediaFile?.url)?.mediaFile?.url || null,
+      // Incluir informações resumidas dos exercícios
+      exercises: workout.exercises.map(exercise => ({
+        publicId: exercise.publicId,
+        name: exercise.name,
+        duration: exercise.duration,
+        type: exercise.type,
+        // Incluir apenas informações básicas da mídia
+        mediaFile: exercise.mediaFile ? {
+          url: exercise.mediaFile.url,
+          type: exercise.mediaFile.type,
+          // Incluir thumbnail para vídeos se necessário
+          thumbnail: exercise.mediaFile.type === 'video' ? 
+            exercise.mediaFile.url.replace('.mp4', '.jpg') : null // Cloudinary gera thumbnails automaticamente
+        } : null
+      })),
+      createdAt: workout.createdAt
+    }));
 
     const total = await Workout.countDocuments(filter);
 
     res.json({
-      workouts,
-      totalPages: Math.ceil(total / limit),
-      currentPage: +page,
-      total
+      success: true,
+      data: {
+        workouts: processedWorkouts,
+        totalPages: Math.ceil(total / limit),
+        currentPage: +page,
+        total
+      }
     });
 
   } catch (error) {
     console.error('Erro ao buscar treinos:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Erro interno do servidor' 
+    });
   }
 };
 
@@ -177,14 +95,72 @@ export const getWorkoutById = async (req, res) => {
     const { companyPublicId } = req.user;
     const { publicId } = req.params;
 
-    const workout = await Workout.findOne({ publicId, companyPublicId, isActive: true })
-      .select('-__v');
+    const workout = await Workout.findOne({ 
+      publicId, 
+      companyPublicId, 
+      isActive: true 
+    })
+    .select('-__v')
+    .lean();
 
-    if (!workout) return res.status(404).json({ message: 'Treino não encontrado' });
+    if (!workout) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Treino não encontrado' 
+      });
+    }
 
-    res.json(workout);
+    // Processar o workout para incluir todas as informações das mídias
+    const processedWorkout = {
+      publicId: workout.publicId,
+      name: workout.name,
+      description: workout.description,
+      totalDuration: workout.totalDuration,
+      exercisesCount: workout.exercises.length,
+      createdAt: workout.createdAt,
+      updatedAt: workout.updatedAt,
+      exercises: workout.exercises.map(exercise => ({
+        publicId: exercise.publicId,
+        name: exercise.name,
+        duration: exercise.duration,
+        type: exercise.type,
+        targetMuscles: exercise.targetMuscles || [],
+        instructions: exercise.instructions || '',
+        restTime: exercise.restTime || 30,
+        sets: exercise.sets || 1,
+        reps: exercise.reps || 0,
+        weight: exercise.weight || 0,
+        // Incluir todas as informações da mídia
+        mediaFile: exercise.mediaFile ? {
+          url: exercise.mediaFile.url,
+          type: exercise.mediaFile.type,
+          name: exercise.mediaFile.name,
+          publicId: exercise.mediaFile.publicId,
+          resourceType: exercise.mediaFile.resourceType,
+          format: exercise.mediaFile.format,
+          width: exercise.mediaFile.width,
+          height: exercise.mediaFile.height,
+          duration: exercise.mediaFile.duration,
+          // Para vídeos, você pode gerar URLs de thumbnail do Cloudinary
+          thumbnail: exercise.mediaFile.type === 'video' ? 
+            exercise.mediaFile.url.replace('/upload/', '/upload/w_400,h_225,c_fill/') : null,
+          // URL para download se necessário
+          downloadUrl: exercise.mediaFile.url.replace('/upload/', '/upload/fl_attachment/')
+        } : null
+      }))
+    };
+
+    res.json({
+      success: true,
+      data: processedWorkout
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    console.error('Erro ao buscar treino por ID:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Erro interno do servidor' 
+    });
   }
 };
 
@@ -192,112 +168,314 @@ export const getWorkoutById = async (req, res) => {
 export const createWorkout = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ message: 'Dados inválidos', errors: errors.array() });
+    return res.status(400).json({ 
+      success: false,
+      message: 'Dados inválidos', 
+      errors: errors.array() 
+    });
   }
 
   try {
     const { companyPublicId, publicId: userPublicId } = req.user;
     const { name, description, exercises } = req.body;
 
-    // Processar exercícios para garantir que tenham os campos necessários
-    const processedExercises = exercises.map((exercise, index) => ({
-      ...exercise,
-      id: exercise.id || index + 1,
-      duration: exercise.duration || 60,
-      type: exercise.type || 'strength',
-      // Se não tiver video, usar um placeholder ou null
-      video: exercise.video || null,
-      tips: exercise.tips || [],
-      completed: false
-    }));
-
-    const workout = new Workout({
+    console.log('📝 Dados recebidos para criar treino:', {
       name,
-      description: description || '',
+      description,
+      exercisesCount: exercises?.length,
+      filesCount: req.files?.length || 0,
+      companyPublicId,
+      userPublicId
+    });
+
+    // Processar exercícios
+    const processedExercises = await Promise.all(
+      exercises.map(async (exercise, index) => {
+        let mediaFile = null;
+
+        // Procurar arquivo correspondente a este exercício
+        if (req.files && req.files.length > 0) {
+          const fileFieldName = `exercises[${index}][mediaFile]`;
+          const file = req.files.find(f => f.fieldname === fileFieldName);
+          
+          if (file) {
+            try {
+              console.log(`📁 Processando arquivo para exercício ${index}:`, file.originalname);
+
+              // Fazer upload para Cloudinary
+              const uploadResult = await uploadExerciseMediaToCloudinary(
+                file.buffer,
+                file.originalname
+              );
+
+              const isVideo = uploadResult.resource_type === 'video';
+              mediaFile = {
+                url: uploadResult.secure_url,
+                type: isVideo ? 'video' : 'image',
+                name: file.originalname,
+                publicId: uploadResult.public_id,
+                resourceType: uploadResult.resource_type,
+                format: uploadResult.format,
+                width: uploadResult.width,
+                height: uploadResult.height,
+                ...(isVideo && { duration: uploadResult.duration })
+              };
+
+              console.log(`✅ Mídia do exercício ${index} uploadada:`, file.originalname);
+            } catch (uploadError) {
+              console.error(`❌ Erro no upload da mídia do exercício ${index}:`, uploadError);
+            }
+          }
+        }
+
+        return {
+          publicId: uuidv4(),
+          name: exercise.name?.trim() || `Exercício ${index + 1}`,
+          duration: parseInt(exercise.duration) || 60,
+          type: exercise.type || 'cardio',
+          targetMuscles: Array.isArray(exercise.targetMuscles) ? exercise.targetMuscles : [],
+          instructions: exercise.instructions?.trim() || '',
+          restTime: parseInt(exercise.restTime) || 30,
+          sets: parseInt(exercise.sets) || 1,
+          reps: parseInt(exercise.reps) || 0,
+          weight: parseFloat(exercise.weight) || 0,
+          ...(mediaFile && { mediaFile })
+        };
+      })
+    );
+
+    // Criar workout
+    const workout = new Workout({
+      publicId: uuidv4(),
+      name: name.trim(),
+      description: (description || '').trim(),
       exercises: processedExercises,
       companyPublicId,
       createdByPublicId: userPublicId
     });
 
+    console.log('💾 Salvando workout no banco...');
     await workout.save();
 
-    console.log('Treino salvo com sucesso:', workout);
+    console.log('✅ Treino criado com sucesso! ID:', workout.publicId);
 
     res.status(201).json({
+      success: true,
       message: 'Treino criado com sucesso!',
-      workout: {
+      data: {
         publicId: workout.publicId,
         name: workout.name,
+        description: workout.description,
         totalDuration: workout.totalDuration,
-        exercisesCount: workout.exercises.length
+        exercisesCount: workout.exercises.length,
+        createdAt: workout.createdAt
       }
     });
+
   } catch (error) {
-    console.error('Erro ao criar treino:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    console.error('❌ Erro detalhado ao criar treino:', error);
+    
+    if (error.name === 'ValidationError') {
+      console.error('🔍 Erros de validação:', error.errors);
+    }
+
+    res.status(500).json({ 
+      success: false,
+      message: 'Erro interno do servidor ao criar treino'
+    });
   }
+};
+
+const processExercises = (exercises) => {
+  return exercises.map((exercise, index) => ({
+    name: exercise.name?.trim() || `Exercício ${index + 1}`,
+    description: exercise.instructions?.trim() || exercise.description?.trim() || '',
+    duration: Math.max(1, parseInt(exercise.duration) || 60),
+    restTime: Math.max(0, parseInt(exercise.restTime) || 30),
+    type: ['cardio', 'strength', 'warmup', 'cooldown', 'flexibility'].includes(exercise.type)
+      ? exercise.type
+      : 'cardio',
+    sets: Math.max(1, parseInt(exercise.sets) || 1),
+    reps: Math.max(0, parseInt(exercise.reps) || 0),
+    weight: Math.max(0, parseFloat(exercise.weight) || 0),
+    targetMuscles: Array.isArray(exercise.targetMuscles) ? exercise.targetMuscles : [],
+    video: exercise.video || null,
+    tips: Array.isArray(exercise.tips) ? exercise.tips : [],
+    order: index,
+    completed: false
+  }));
 };
 
 export const updateWorkout = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ message: 'Dados inválidos', errors: errors.array() });
+    return res.status(400).json({
+      success: false,
+      message: 'Dados inválidos',
+      errors: errors.array()
+    });
   }
 
   try {
-    const { companyPublicId } = req.user;
     const { publicId } = req.params;
     const { name, description, exercises } = req.body;
+    const { companyPublicId } = req.user;
 
-    const workout = await Workout.findOne({ publicId, companyPublicId });
-    if (!workout) return res.status(404).json({ message: 'Treino não encontrado' });
+    const workout = await Workout.findOne({
+      publicId,
+      companyPublicId
+    });
 
-    if (name !== undefined) workout.name = name;
-    if (description !== undefined) workout.description = description;
-    if (exercises !== undefined) {
-      // Processar exercícios para garantir estrutura consistente
-      workout.exercises = exercises.map((exercise, index) => ({
-        ...exercise,
-        id: exercise.id || index + 1,
-        duration: exercise.duration || 60,
-        type: exercise.type || 'strength',
-        video: exercise.video || null,
-        tips: exercise.tips || [],
-        completed: exercise.completed || false
-      }));
+    if (!workout) {
+      return res.status(404).json({
+        success: false,
+        message: 'Treino não encontrado'
+      });
     }
 
-    workout.updatedAt = new Date();
+    // Processar exercícios para update
+    const processedExercises = await Promise.all(
+      exercises.map(async (exercise, index) => {
+        let mediaFile = null;
+
+        // Verificar se há novo arquivo de mídia
+        if (req.files && req.files[`exercises[${index}][mediaFile]`]) {
+          const file = req.files[`exercises[${index}][mediaFile]`];
+
+          try {
+            // Validar arquivo (mesma validação do create)
+            const maxSize = 10 * 1024 * 1024;
+            if (file.size > maxSize) {
+              throw new Error('Arquivo muito grande. Tamanho máximo: 10MB');
+            }
+
+            const allowedTypes = [
+              'image/gif', 'image/jpeg', 'image/png', 'image/webp',
+              'video/mp4', 'video/mov', 'video/avi', 'video/webm', 'video/quicktime'
+            ];
+
+            if (!allowedTypes.includes(file.mimetype)) {
+              throw new Error('Tipo de arquivo não suportado');
+            }
+
+            // Deletar mídia antiga se existir
+            const oldExercise = workout.exercises[index];
+            if (oldExercise?.mediaFile?.publicId) {
+              await deleteFromCloudinary(oldExercise.mediaFile.publicId);
+            }
+
+            // Fazer upload da nova mídia
+            const uploadResult = await uploadExerciseMediaToCloudinary(
+              file.data,
+              file.name
+            );
+
+            const isVideo = uploadResult.resource_type === 'video';
+            mediaFile = {
+              url: uploadResult.secure_url,
+              type: isVideo ? 'video' : 'image',
+              name: file.name,
+              publicId: uploadResult.public_id,
+              resourceType: uploadResult.resource_type,
+              format: uploadResult.format,
+              width: uploadResult.width,
+              height: uploadResult.height,
+              ...(isVideo && { duration: uploadResult.duration })
+            };
+
+          } catch (uploadError) {
+            console.error(`❌ Erro no upload da mídia do exercício ${index}:`, uploadError);
+            // Manter a mídia existente em caso de erro
+            mediaFile = workout.exercises[index]?.mediaFile || null;
+          }
+        } else {
+          // Manter a mídia existente se não há novo upload
+          mediaFile = workout.exercises[index]?.mediaFile || null;
+        }
+
+        return {
+          publicId: exercise.publicId || uuidv4(),
+          name: exercise.name?.trim() || `Exercício ${index + 1}`,
+          duration: parseInt(exercise.duration) || 60,
+          type: exercise.type || 'cardio',
+          targetMuscles: Array.isArray(exercise.targetMuscles) ? exercise.targetMuscles : [],
+          instructions: exercise.instructions?.trim() || '',
+          restTime: parseInt(exercise.restTime) || 30,
+          sets: parseInt(exercise.sets) || 1,
+          reps: parseInt(exercise.reps) || 0,
+          weight: parseFloat(exercise.weight) || 0,
+          mediaFile
+        };
+      })
+    );
+
+    // Atualizar workout
+    workout.name = name.trim();
+    workout.description = (description || '').trim();
+    workout.exercises = processedExercises;
+
     await workout.save();
 
     res.json({
+      success: true,
       message: 'Treino atualizado com sucesso!',
-      workout: {
+      data: {
         publicId: workout.publicId,
         name: workout.name,
+        description: workout.description,
         totalDuration: workout.totalDuration,
-        exercisesCount: workout.exercises.length
+        exercisesCount: workout.exercises.length,
+        updatedAt: workout.updatedAt
       }
     });
+
   } catch (error) {
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    console.error('❌ Erro ao atualizar treino:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor ao atualizar treino'
+    });
   }
 };
 
 export const deleteWorkout = async (req, res) => {
   try {
-    const { companyPublicId } = req.user;
     const { publicId } = req.params;
+    const { companyPublicId } = req.user;
 
-    const workout = await Workout.findOne({ publicId, companyPublicId });
-    if (!workout) return res.status(404).json({ message: 'Treino não encontrado' });
+    const workout = await Workout.findOne({
+      publicId,
+      companyPublicId
+    });
 
-    workout.isActive = false;
-    await workout.save();
+    if (!workout) {
+      return res.status(404).json({
+        success: false,
+        message: 'Treino não encontrado'
+      });
+    }
 
-    res.json({ message: 'Treino deletado com sucesso!' });
+    // Deletar todas as mídias do Cloudinary
+    const deletePromises = workout.exercises
+      .filter(ex => ex.mediaFile?.publicId)
+      .map(ex => deleteFromCloudinary(ex.mediaFile.publicId));
+
+    await Promise.allSettled(deletePromises);
+
+    // Deletar workout
+    await Workout.deleteOne({ publicId });
+
+    res.json({
+      success: true,
+      message: 'Treino deletado com sucesso'
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    console.error('❌ Erro ao deletar treino:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor ao deletar treino'
+    });
   }
 };
 

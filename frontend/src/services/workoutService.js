@@ -10,19 +10,21 @@ const workoutService = {
                 throw new Error('Resposta vazia da API');
             }
 
+            // A nova estrutura retorna { success, data: { workouts, ... } }
             const data = result.data || result;
 
             if (result.success === false) {
                 throw new Error(result.message || 'Erro ao buscar treinos');
             }
 
-            const workouts = data.workouts || data || [];
+            // Acessar workouts através da nova estrutura
+            const workouts = data.data?.workouts || data.workouts || data || [];
 
             return {
                 workouts: Array.isArray(workouts) ? workouts : [],
-                totalPages: data.totalPages || 1,
-                currentPage: data.currentPage || 1,
-                total: data.total || (Array.isArray(workouts) ? workouts.length : 0)
+                totalPages: data.data?.totalPages || data.totalPages || 1,
+                currentPage: data.data?.currentPage || data.currentPage || 1,
+                total: data.data?.total || data.total || (Array.isArray(workouts) ? workouts.length : 0)
             };
         } catch (error) {
             console.error('Erro ao buscar treinos:', error);
@@ -48,20 +50,71 @@ const workoutService = {
         }
     },
 
-    // Upload de mídia (GIF/Video) para exercícios
-     async uploadExerciseMedia(file) {
+    async createWorkout(workoutData) {
         try {
             const formData = new FormData();
-            formData.append('media', file);
 
-            console.log('📤 Iniciando upload do arquivo:', file.name, 'Tipo:', file.type, 'Tamanho:', file.size);
+            console.log('📤 Preparando dados para criar treino:', {
+                name: workoutData.name,
+                exercisesCount: workoutData.exercises?.length,
+                hasMediaFiles: workoutData.exercises?.some(ex => ex.mediaFile?.file)
+            });
 
-            const result = await api.post('/workouts/upload-exercise-media', formData, {
-                headers: {
-                    // REMOVER a definição manual de Content-Type para FormData
-                    // O axios/browser vai definir automaticamente com boundary
-                },
-                timeout: 60000, // 60 segundos para uploads grandes
+            // Adicionar campos básicos
+            formData.append('name', workoutData.name?.trim() || '');
+            formData.append('description', workoutData.description?.trim() || '');
+
+            // Processar cada exercício
+            workoutData.exercises?.forEach((exercise, index) => {
+                // Campos básicos do exercício
+                formData.append(`exercises[${index}][name]`, exercise.name?.trim() || '');
+                formData.append(`exercises[${index}][instructions]`, exercise.instructions?.trim() || '');
+                formData.append(`exercises[${index}][duration]`, (parseInt(exercise.duration) || 60).toString());
+                formData.append(`exercises[${index}][type]`, exercise.type || 'cardio');
+                formData.append(`exercises[${index}][restTime]`, (parseInt(exercise.restTime) || 30).toString());
+                formData.append(`exercises[${index}][sets]`, (parseInt(exercise.sets) || 1).toString());
+                formData.append(`exercises[${index}][reps]`, (parseInt(exercise.reps) || 0).toString());
+                formData.append(`exercises[${index}][weight]`, (parseFloat(exercise.weight) || 0).toString());
+
+                // Músculos alvo - enviar como string JSON
+                if (Array.isArray(exercise.targetMuscles)) {
+                    formData.append(`exercises[${index}][targetMuscles]`, JSON.stringify(exercise.targetMuscles));
+                }
+
+                // Dicas - enviar como string JSON
+                if (Array.isArray(exercise.tips)) {
+                    formData.append(`exercises[${index}][tips]`, JSON.stringify(exercise.tips));
+                }
+
+                // Adicionar arquivo de mídia se existir
+                if (exercise.mediaFile?.file) {
+                    console.log(`📁 Adicionando arquivo para exercício ${index}:`, exercise.mediaFile.file.name);
+                    formData.append(`exercises[${index}][mediaFile]`, exercise.mediaFile.file);
+                }
+            });
+
+            // Validação básica
+            if (!workoutData.name || workoutData.name.trim() === '') {
+                throw new Error('Nome do treino é obrigatório');
+            }
+
+            if (!workoutData.exercises || workoutData.exercises.length === 0) {
+                throw new Error('Pelo menos um exercício é obrigatório');
+            }
+
+            console.log('🚀 Enviando FormData para API...');
+
+            // DEBUG: Verificar o que está sendo enviado
+            for (let [key, value] of formData.entries()) {
+                if (value instanceof File) {
+                    console.log(`📦 FormData: ${key} = File: ${value.name} (${value.type}, ${value.size} bytes)`);
+                } else {
+                    console.log(`📦 FormData: ${key} =`, value);
+                }
+            }
+
+            const result = await api.post('/workouts', formData, {
+                timeout: 120000,
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total) {
                         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -70,69 +123,8 @@ const workoutService = {
                 }
             });
 
-            console.log('✅ Upload concluído com sucesso:', result);
+            console.log('✅ Treino criado com sucesso:', result);
 
-            if (result && typeof result === 'object') {
-                if (result.success === false) {
-                    throw new Error(result.message || 'Erro no upload de mídia');
-                }
-                return result.data || result;
-            } else {
-                throw new Error('Resposta inválida da API');
-            }
-        } catch (error) {
-            console.error('❌ Erro detalhado no upload de mídia:', error);
-            
-            // Log mais detalhado do erro
-            if (error.response) {
-                console.error('📊 Response data:', error.response.data);
-                console.error('🔧 Status:', error.response.status);
-                console.error('🧩 Headers:', error.response.headers);
-            } else if (error.request) {
-                console.error('🌐 Request error:', error.request);
-            } else {
-                console.error('⚡ Error message:', error.message);
-            }
-
-            throw this.handleError(error);
-        }
-    },
-
-    async createWorkout(workoutData) {
-        try {
-            // Formatação dos dados para a API
-            const formatted = {
-                name: workoutData.name?.trim(),
-                description: workoutData.description?.trim() || '',
-                category: 'custom',
-                difficulty: 'intermediate',
-                exercises: workoutData.exercises?.map((exercise, index) => ({
-                    name: exercise.name?.trim(),
-                    description: exercise.instructions?.trim() || '',
-                    duration: parseInt(exercise.duration) || 60,
-                    restTime: parseInt(exercise.restTime) || 30,
-                    type: exercise.type || 'cardio',
-                    sets: parseInt(exercise.sets) || 1,
-                    reps: parseInt(exercise.reps) || 0,
-                    weight: parseFloat(exercise.weight) || 0,
-                    targetMuscles: exercise.targetMuscles || [],
-                    video: exercise.video || null, // Campo para URL do vídeo/GIF
-                    tips: exercise.tips || [], // Campo para dicas
-                    order: index,
-                })) || []
-            };
-
-            // Validação básica antes do envio
-            if (!formatted.name || formatted.name.trim() === '') {
-                throw new Error('Nome do treino é obrigatório');
-            }
-
-            if (formatted.exercises.length === 0) {
-                throw new Error('Pelo menos um exercício é obrigatório');
-            }
-
-            const result = await api.post('/workouts', formatted);
-            
             if (result && typeof result === 'object') {
                 if (result.success === false) {
                     throw new Error(result.message || 'Erro ao criar treino');
@@ -148,7 +140,7 @@ const workoutService = {
             if (error.response) {
                 console.error('📊 Response data do erro:', error.response.data);
                 console.error('🔧 Status do erro:', error.response.status);
-                console.error('🧩 Headers do erro:', error.response.headers);
+                console.error('🔧 Headers do erro:', error.response.headers);
             }
 
             throw this.handleError(error);
@@ -157,27 +149,67 @@ const workoutService = {
 
     async updateWorkout(publicId, workoutData) {
         try {
-            const formatted = {
-                name: workoutData.name?.trim(),
-                description: workoutData.description?.trim() || '',
-                exercises: workoutData.exercises?.map((exercise, index) => ({
-                    name: exercise.name?.trim(),
-                    description: exercise.instructions?.trim() || '',
-                    duration: parseInt(exercise.duration) || 60,
-                    restTime: parseInt(exercise.restTime) || 30,
-                    type: exercise.type || 'cardio',
-                    sets: parseInt(exercise.sets) || 1,
-                    reps: parseInt(exercise.reps) || 0,
-                    weight: parseFloat(exercise.weight) || 0,
-                    targetMuscles: exercise.targetMuscles || [],
-                    video: exercise.video || null,
-                    tips: exercise.tips || [],
-                    order: index,
-                })) || []
-            };
+            // Criar FormData para update também
+            const formData = new FormData();
 
-            const result = await api.put(`/workouts/${publicId}`, formatted);
-            
+            console.log('📤 Preparando dados para atualizar treino:', {
+                publicId,
+                name: workoutData.name,
+                exercisesCount: workoutData.exercises?.length
+            });
+
+            // Adicionar campos básicos
+            formData.append('name', workoutData.name?.trim() || '');
+            formData.append('description', workoutData.description?.trim() || '');
+
+            // Adicionar exercícios
+            workoutData.exercises?.forEach((exercise, index) => {
+                // Campos básicos do exercício
+                formData.append(`exercises[${index}][name]`, exercise.name?.trim() || '');
+                formData.append(`exercises[${index}][instructions]`, exercise.instructions?.trim() || '');
+                formData.append(`exercises[${index}][duration]`, parseInt(exercise.duration) || 60);
+                formData.append(`exercises[${index}][type]`, exercise.type || 'cardio');
+                formData.append(`exercises[${index}][restTime]`, parseInt(exercise.restTime) || 30);
+                formData.append(`exercises[${index}][sets]`, parseInt(exercise.sets) || 1);
+                formData.append(`exercises[${index}][reps]`, parseInt(exercise.reps) || 0);
+                formData.append(`exercises[${index}][weight]`, parseFloat(exercise.weight) || 0);
+
+                // Se o exercício tem publicId (para updates), enviar também
+                if (exercise.publicId) {
+                    formData.append(`exercises[${index}][publicId]`, exercise.publicId);
+                }
+
+                // Músculos alvo
+                if (Array.isArray(exercise.targetMuscles)) {
+                    exercise.targetMuscles.forEach((muscle, muscleIndex) => {
+                        formData.append(`exercises[${index}][targetMuscles][${muscleIndex}]`, muscle);
+                    });
+                }
+
+                // Dicas
+                if (Array.isArray(exercise.tips)) {
+                    exercise.tips.forEach((tip, tipIndex) => {
+                        formData.append(`exercises[${index}][tips][${tipIndex}]`, tip);
+                    });
+                }
+
+                // Adicionar arquivo de mídia se existir
+                if (exercise.mediaFile?.file) {
+                    console.log(`📁 Adicionando arquivo para exercício ${index}:`, exercise.mediaFile.file.name);
+                    formData.append(`exercises[${index}][mediaFile]`, exercise.mediaFile.file);
+                }
+            });
+
+            const result = await api.put(`/workouts/${publicId}`, formData, {
+                timeout: 120000,
+                onUploadProgress: (progressEvent) => {
+                    if (progressEvent.total) {
+                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        console.log(`📊 Progresso do upload: ${percentCompleted}%`);
+                    }
+                }
+            });
+
             if (result && typeof result === 'object') {
                 if (result.success === false) {
                     throw new Error(result.message || 'Erro ao atualizar treino');
@@ -195,7 +227,7 @@ const workoutService = {
     async deleteWorkout(publicId) {
         try {
             const result = await api.delete(`/workouts/${publicId}`);
-            
+
             if (result && typeof result === 'object') {
                 if (result.success === false) {
                     throw new Error(result.message || 'Erro ao deletar treino');
@@ -213,7 +245,7 @@ const workoutService = {
     async getWorkoutStats() {
         try {
             const result = await api.get('/workouts/stats');
-            
+
             if (result && typeof result === 'object') {
                 if (result.success === false) {
                     throw new Error(result.message || 'Erro ao buscar estatísticas');
@@ -231,7 +263,7 @@ const workoutService = {
     async testAuth() {
         try {
             const result = await api.get('/workouts/debug/auth');
-            
+
             if (result && typeof result === 'object') {
                 if (result.success === false) {
                     throw new Error(result.message || 'Erro no teste de autenticação');

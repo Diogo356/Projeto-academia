@@ -1,11 +1,12 @@
-// src/components/workout/ViewerWorkoutList.jsx - ATUALIZADO
-import React, { useState, useEffect } from 'react';
+// src/components/workout/ViewerWorkoutList.jsx - REFATORADO
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom'; // ✅ NOVO IMPORT
+import { useNavigate } from 'react-router-dom';
 import {
     FaSpinner, FaExclamationTriangle, FaDumbbell,
     FaClock, FaFire, FaHeartbeat, FaUser,
-    FaSnowflake, FaRunning, FaEye
+    FaSnowflake, FaRunning, FaEye, FaPlay, // ✅ NOVOS ÍCONES
+    FaBolt, FaStar, FaImage // ✅ NOVOS ÍCONES
 } from 'react-icons/fa';
 import workoutService from '../../services/workoutService';
 import WorkoutViewModal from '../admin/tabs/workout/WorkoutViewModal';
@@ -17,10 +18,10 @@ const ViewerWorkoutList = () => {
     const [error, setError] = useState(null);
     const [selectedWorkout, setSelectedWorkout] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const navigate = useNavigate(); // ✅ HOOK DE NAVEGAÇÃO
+    const navigate = useNavigate();
 
-    // Ícones para categorias
-    const categoryIcons = {
+    // Ícones para categorias (Mantido, mas não usado diretamente no badge do card)
+    const categoryIcons = useMemo(() => ({
         cardio: FaRunning,
         strength: FaDumbbell,
         hiit: FaFire,
@@ -28,114 +29,139 @@ const ViewerWorkoutList = () => {
         pilates: FaHeartbeat,
         mobility: FaSnowflake,
         custom: FaDumbbell
-    };
+    }), []);
+
+    // --- UTILS (REUTILIZADOS E MELHORADOS) ---
 
     // Buscar treinos do back-end
-    const fetchWorkouts = async () => {
+    const fetchWorkouts = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
-
+            // Presumindo que o serviço de treino é igual ao da versão Admin
             const response = await workoutService.getWorkouts();
-            const workoutsData = response.workouts || [];
-
+            const workoutsData = response.data?.workouts || response.workouts || [];
             setWorkouts(workoutsData);
-
         } catch (err) {
             console.error('❌ Erro ao buscar treinos:', err);
             setError(err.message || 'Erro ao carregar treinos');
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     // Carregar treinos ao montar o componente
     useEffect(() => {
         fetchWorkouts();
-    }, []);
+    }, [fetchWorkouts]);
 
-    // ✅ NOVA FUNÇÃO: Navegar para o treino ativo
+
+    // ✅ NOVA FUNÇÃO: Navegar para o treino ativo (Mantido)
     const navigateToActiveWorkout = (workout) => {
+        // Assume que a rota de visualização ativa (iniciar) é /workout/:publicId
         if (workout.publicId) {
             navigate(`/workout/${workout.publicId}`);
         } else {
             console.error('Workout sem publicId:', workout);
             // Fallback: usar modal se não tiver publicId
-            setSelectedWorkout(workout);
+            openWorkoutModal(workout);
+        }
+    };
+
+    // Função para abrir o modal de visualização (para detalhes)
+    const openWorkoutModal = useCallback(async (workout) => {
+        try {
+            // Tenta buscar detalhes completos, se falhar, usa os dados da lista
+            const details = await workoutService.getWorkoutById(workout.publicId);
+            setSelectedWorkout(details.data || details);
+        } catch {
+            setSelectedWorkout(workout); // Fallback para os dados já carregados
+        } finally {
             setIsModalOpen(true);
         }
-    };
-
-    // Função para abrir o modal de visualização (como fallback)
-    const openWorkoutModal = (workout) => {
-        setSelectedWorkout(workout);
-        setIsModalOpen(true);
-    };
+    }, []);
 
     // Função para fechar o modal
-    const closeWorkoutModal = () => {
+    const closeWorkoutModal = useCallback(() => {
         setIsModalOpen(false);
         setSelectedWorkout(null);
-    };
+    }, []);
 
-    // Formatar data
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('pt-BR');
-    };
+    // Formatar data (Reutilizado)
+    const formatDate = (dateString) => new Date(dateString).toLocaleDateString('pt-BR');
 
-    // Formatar duração
+    // Formatar duração (Reutilizado)
     const formatDuration = (seconds) => {
         if (!seconds) return '0 min';
-
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-
-        if (hours > 0) {
-            return `${hours}h ${minutes % 60}min`;
-        }
-        return `${minutes} min`;
+        const m = Math.floor(seconds / 60);
+        const h = Math.floor(m / 60);
+        return h > 0 ? `${h}h ${m % 60}min` : `${m} min`;
     };
 
-    // Traduzir categoria
-    const translateCategory = (category) => {
-        const translations = {
-            cardio: 'Cardio',
-            strength: 'Força',
-            hiit: 'HIIT',
-            yoga: 'Yoga',
-            pilates: 'Pilates',
-            mobility: 'Mobilidade',
-            custom: 'Personalizado'
-        };
-        return translations[category] || category;
+    // Obter nível de intensidade do treino (Novo Utilitário)
+    const getWorkoutIntensity = (duration, exercises) => {
+        const avgDuration = duration / (exercises.length || 1);
+        if (avgDuration > 180) return { label: 'Alta', icon: FaBolt, color: 'text-red-600', bg: 'bg-red-50' };
+        if (avgDuration > 90) return { label: 'Média', icon: FaFire, color: 'text-orange-600', bg: 'bg-orange-50' };
+        return { label: 'Baixa', icon: FaStar, color: 'text-green-600', bg: 'bg-green-50' };
     };
 
-    // Traduzir dificuldade
-    const translateDifficulty = (difficulty) => {
-        const translations = {
-            beginner: 'Iniciante',
-            intermediate: 'Intermediário',
-            advanced: 'Avançado'
-        };
-        return translations[difficulty] || difficulty;
+    // Obter a thumbnail (Novo Utilitário)
+    const getThumbnail = (workout) => {
+        if (workout.thumbnail) return { url: workout.thumbnail, type: 'image' };
+        const exWithMedia = workout.exercises?.find(ex => ex.mediaFile);
+        return exWithMedia?.mediaFile || null;
     };
 
-    // Obter cor da dificuldade
-    const getDifficultyColor = (difficulty) => {
-        const colors = {
-            beginner: 'green',
-            intermediate: 'yellow',
-            advanced: 'red'
-        };
-        return colors[difficulty] || 'gray';
-    };
+    // Contar mídia (Novo Utilitário)
+    const countMedia = (workout) => workout.exercises?.filter(ex => ex.mediaFile).length || 0;
+
+    // Componente auxiliar para a Thumbnail (Novo Componente)
+    const MediaThumbnail = React.memo(({ media, className = "" }) => {
+        if (!media) return null;
+        const isVideo = media.type === 'video';
+        const imageUrl = isVideo ? (media.thumbnail || media.url) : media.url;
+
+        return (
+            <div className={`relative rounded-xl overflow-hidden shadow-md ${className}`}>
+                <img
+                    src={imageUrl}
+                    alt={isVideo ? "Vídeo do exercício" : "Imagem do exercício"}
+                    className="w-full h-full object-cover"
+                />
+                {isVideo && (
+                    <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                        <FaPlay className="text-white text-2xl drop-shadow" />
+                    </div>
+                )}
+            </div>
+        );
+    });
+
+    // Skeleton Card (Novo Componente)
+    const SkeletonCard = () => (
+        <div className="bg-white border border-gray-200 rounded-3xl p-6 animate-pulse">
+            <div className="h-48 bg-gray-200 rounded-2xl mb-4"></div>
+            <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-full mb-3"></div>
+            <div className="flex space-x-2 mb-4">
+                <div className="h-8 w-20 bg-gray-200 rounded-full"></div>
+                <div className="h-8 w-16 bg-gray-200 rounded-full"></div>
+            </div>
+            <div className="h-4 bg-gray-200 rounded w-1/2 mt-auto"></div>
+        </div>
+    );
+
+    // --- RENDERIZAÇÃO ---
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                    <p className="text-gray-600 mt-4">Carregando treinos...</p>
+            <div className="min-h-screen p-6">
+                <div className="flex justify-between items-center mb-8">
+                    <div className="h-8 bg-gray-200 rounded w-48 animate-pulse"></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
                 </div>
             </div>
         );
@@ -143,7 +169,6 @@ const ViewerWorkoutList = () => {
 
     return (
         <ViewerLayout>
-
             <div className="space-y-8 p-6">
                 {/* Header */}
                 <div className="text-center">
@@ -152,11 +177,12 @@ const ViewerWorkoutList = () => {
                         Treinos Disponíveis
                     </h2>
                     <p className="text-gray-600 mt-2">
-                        Visualize todos os treinos da academia
+                        Visualize e comece o seu próximo treino.
                     </p>
                 </div>
 
-                {error ? (
+                {/* Bloco de Erro */}
+                {error && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -172,7 +198,10 @@ const ViewerWorkoutList = () => {
                             Tentar Novamente
                         </button>
                     </motion.div>
-                ) : workouts.length === 0 ? (
+                )}
+
+                {/* Bloco de Vazio */}
+                {!error && workouts.length === 0 && (
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
@@ -186,79 +215,118 @@ const ViewerWorkoutList = () => {
                             Aguarde enquanto a academia cria os primeiros treinos.
                         </p>
                     </motion.div>
-                ) : (
+                )}
+
+                {/* Lista de Treinos */}
+                {!error && workouts.length > 0 && (
                     <motion.div
                         layout
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                     >
                         <AnimatePresence>
                             {workouts.map((workout, index) => {
-                                const CategoryIcon = categoryIcons[workout.category] || FaDumbbell;
-                                const difficultyColor = getDifficultyColor(workout.difficulty);
+                                const mediaCount = countMedia(workout);
+                                const thumbnail = getThumbnail(workout);
+                                const intensity = getWorkoutIntensity(workout.totalDuration, workout.exercises);
+                                const IntensityIcon = intensity.icon;
+                                const durationLabel = formatDuration(workout.totalDuration);
+                                const exerciseCount = workout.exercises?.length || 0;
 
                                 return (
                                     <motion.div
                                         key={workout.publicId || workout._id || index}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -20 }}
-                                        transition={{ delay: index * 0.1 }}
-                                        className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300 group cursor-pointer"
-                                        onClick={() => navigateToActiveWorkout(workout)} // ✅ AGORA USA NAVEGAÇÃO
+                                        layout
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.9 }}
+                                        transition={{ delay: index * 0.05 }}
+                                        onClick={() => navigateToActiveWorkout(workout)}
+                                        className="group bg-white rounded-3xl shadow-lg shadow-gray-100/50 hover:shadow-xl transition-all duration-300 flex flex-col cursor-pointer"
                                     >
-                                        {/* Header */}
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="p-2 bg-blue-50 rounded-xl">
-                                                    <CategoryIcon className="text-blue-600 text-xl" />
+                                        {/* Thumbnail */}
+                                        <div className="relative h-48 bg-gray-100 rounded-t-3xl overflow-hidden">
+                                            {thumbnail ? (
+                                                <>
+                                                    <MediaThumbnail 
+                                                        media={thumbnail} 
+                                                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                                                    />
+                                                    {mediaCount > 1 && (
+                                                        <div className="absolute top-3 right-3 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                                                            <FaImage /> {mediaCount}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                                                    <FaDumbbell className="text-gray-300 text-5xl" />
                                                 </div>
-                                                <div>
-                                                    <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-blue-600 transition-colors">
-                                                        {workout.name}
-                                                    </h3>
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${difficultyColor === 'green' ? 'bg-green-100 text-green-800' :
-                                                            difficultyColor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
-                                                                'bg-red-100 text-red-800'
-                                                        }`}>
-                                                        {translateDifficulty(workout.difficulty)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Informações */}
-                                        <div className="space-y-3 mb-4">
-                                            <div className="flex items-center text-sm text-gray-600">
-                                                <FaClock className="mr-2 text-gray-400" />
-                                                <span>{formatDuration(workout.totalDuration)}</span>
-                                            </div>
-                                            <div className="flex items-center text-sm text-gray-600">
-                                                <FaDumbbell className="mr-2 text-gray-400" />
-                                                <span>{(workout.exercises && workout.exercises.length) || 0} exercícios</span>
-                                            </div>
-                                            <div className="flex items-center text-sm text-gray-600">
-                                                <span className="mr-2">🏷️</span>
-                                                <span>{translateCategory(workout.category)}</span>
-                                            </div>
-                                            {workout.description && (
-                                                <p className="text-sm text-gray-600 line-clamp-2">
-                                                    {workout.description}
-                                                </p>
                                             )}
                                         </div>
 
-                                        {/* Ação Única - Visualizar */}
-                                        <div className="flex space-x-2 pt-4 border-t border-gray-100">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigateToActiveWorkout(workout); // ✅ AGORA USA NAVEGAÇÃO
-                                                }}
-                                                className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center justify-center space-x-1 text-sm font-medium"
-                                            >
-                                                <FaEye className="text-xs" />
-                                                <span>Iniciar Treino</span> {/* ✅ TEXTO ATUALIZADO */}
-                                            </button>
+                                        {/* Conteúdo */}
+                                        <div className="p-5 flex-1 flex flex-col">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <h3 className="font-bold text-xl text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors pr-2">
+                                                    {workout.name}
+                                                </h3>
+                                            </div>
+
+                                            {workout.description && (
+                                                <p className="text-sm text-gray-600 line-clamp-2 mb-4">
+                                                    {workout.description}
+                                                </p>
+                                            )}
+
+                                            {/* BADGES DE STATS */}
+                                            <div className="flex flex-wrap items-center gap-2 text-xs font-medium mb-4">
+                                                <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${intensity.color} ${intensity.bg}`}>
+                                                    <IntensityIcon className="text-xs" />
+                                                    {intensity.label}
+                                                </span>
+                                                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
+                                                    <FaClock />
+                                                    {durationLabel}
+                                                </span>
+                                                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                                                    <FaDumbbell />
+                                                    {exerciseCount} {exerciseCount === 1 ? 'Exer.' : 'Exers.'}
+                                                </span>
+                                            </div>
+
+                                            {/* Preview de exercícios (se houver) */}
+                                            {mediaCount > 0 && (
+                                                <div className="flex gap-1.5 mb-4 overflow-hidden">
+                                                    {workout.exercises.slice(0, 5).map((ex, i) =>
+                                                        ex.mediaFile ? (
+                                                            <div key={i} className="flex-shrink-0">
+                                                                <MediaThumbnail media={ex.mediaFile} className="w-10 h-10 rounded-lg" />
+                                                            </div>
+                                                        ) : null
+                                                    )}
+                                                    {mediaCount > 5 && (
+                                                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xs text-gray-500 font-medium">
+                                                            +{mediaCount - 5}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Rodapé com a data (Adaptado) */}
+                                            <div className="mt-auto pt-4 text-xs text-gray-500 flex items-center justify-between">
+                                                <span>Criado em: {formatDate(workout.createdAt)}</span>
+                                                {/* Botão de Visualização (Mantido como ação secundária) */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation(); // Impede o clique no card de navegar para o treino ativo
+                                                        openWorkoutModal(workout);
+                                                    }}
+                                                    className="p-1.5 rounded-full text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+                                                    title="Ver detalhes"
+                                                >
+                                                    <FaEye className="text-sm" />
+                                                </button>
+                                            </div>
                                         </div>
                                     </motion.div>
                                 );
@@ -267,7 +335,7 @@ const ViewerWorkoutList = () => {
                     </motion.div>
                 )}
 
-                {/* Modal de Visualização (como fallback) */}
+                {/* Modal de Visualização */}
                 <WorkoutViewModal
                     workout={selectedWorkout}
                     isOpen={isModalOpen}
