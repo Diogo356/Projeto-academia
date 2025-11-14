@@ -1,47 +1,50 @@
 // src/components/admin/AdminSidebar.jsx - ATUALIZADO
 import React from 'react';
-import { 
-  FaChartBar, 
-  FaPlus, 
-  FaList, 
-  FaDumbbell, 
+import {
+  FaChartBar,
+  FaPlus,
+  FaList,
+  FaDumbbell,
   FaCog,
   FaBars,
   FaTimes,
   FaUserShield,
-  FaBuilding 
+  FaBuilding,
+  FaSignOutAlt // <-- 1. Importar o ícone de logout
 } from 'react-icons/fa';
 import { useAuthStore } from '../../services/authService';
+import AuthService from '../../services/authService'; // <-- 1. Importar o AuthService
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const menuItems = [
-  { 
-    id: 'dashboard', 
-    label: 'Dashboard', 
+  // ... (menuItems não mudam)
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
     icon: FaChartBar,
     path: '/admin'
   },
-  { 
-    id: 'create', 
-    label: 'Criar Treino', 
+  {
+    id: 'create',
+    label: 'Criar Treino',
     icon: FaPlus,
     path: '/admin/create'
   },
-  { 
-    id: 'list', 
-    label: 'Meus Treinos', 
+  {
+    id: 'list',
+    label: 'Meus Treinos',
     icon: FaList,
     path: '/admin/list'
   },
-  { 
-    id: 'muscles', 
-    label: 'Músculos', 
+  {
+    id: 'muscles',
+    label: 'Músculos',
     icon: FaDumbbell,
     path: '/admin/muscles'
   },
-  { 
-    id: 'settings', 
-    label: 'Configurações', 
+  {
+    id: 'settings',
+    label: 'Configurações',
     icon: FaCog,
     path: '/admin/settings'
   },
@@ -55,6 +58,7 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
   // Determina a tab ativa baseada na URL
   const getActiveTab = () => {
+    // ... (função getActiveTab não muda)
     const path = location.pathname;
     if (path === '/admin' || path === '/admin/') return 'dashboard';
     if (path.includes('/admin/create')) return 'create';
@@ -71,6 +75,11 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
     setSidebarOpen(false);
   };
 
+  // <-- 2. Criar a função de logout
+  const handleLogout = async () => {
+    await AuthService.logout();
+  };
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -83,6 +92,7 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
       {/* Mobile Header Button */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
+        {/* ... (botão de hamburguer não muda) */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="p-2 bg-white rounded-lg shadow-md border border-gray-200 hover:bg-gray-50 transition-colors"
@@ -97,22 +107,22 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:z-30 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed top-0 left-0 z-40 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:z-30 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         {/* Sidebar Header */}
         <div className="flex items-center shadow-sm justify-between px-6 py-3.5 border-b border-gray-200">
+          {/* ... (Header da sidebar não muda) */}
           <div className="flex items-center space-x-3">
-            <div 
+            <div
               className="p-2 rounded-xl shadow-md transition-all"
               style={{
                 background: 'linear-gradient(135deg, #3B82F6, #1E40AF)'
               }}
             >
               {company?.logo?.url ? (
-                <img 
-                  src={company.logo.url} 
+                <img
+                  src={company.logo.url}
                   alt={`Logo ${company.name}`}
                   className="w-6 h-6 object-contain"
                 />
@@ -121,7 +131,7 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
               )}
             </div>
             <div>
-              <h2 
+              <h2
                 className="text-xl font-bold flex items-center transition-colors"
                 style={{ color: '#1F2937' }}
               >
@@ -134,7 +144,7 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
             </div>
           </div>
           <button
-            onClick={() => setSidebarOpen(false)}
+             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <FaTimes className="text-gray-500 text-sm" />
@@ -143,41 +153,40 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
         {/* Navigation Menu */}
         <nav className="p-4 mt-2">
+          {/* ... (Navegação não muda) */}
           <div className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
-              
+
               return (
                 <button
                   key={item.id}
                   onClick={() => handleNavigation(item.path)}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                    isActive
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
                       ? 'text-white shadow-lg'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
+                    }`}
                   style={{
-                    backgroundColor: isActive 
+                    backgroundColor: isActive
                       ? '#3B82F6'
                       : 'transparent',
-                    boxShadow: isActive 
+                    boxShadow: isActive
                       ? '0 10px 15px -3px rgba(59, 130, 246, 0.25)'
                       : 'none'
                   }}
                 >
-                  <Icon className={`text-lg transition-colors ${
-                    isActive 
-                      ? 'text-white' 
+                  <Icon className={`text-lg transition-colors ${isActive
+                      ? 'text-white'
                       : 'text-gray-400 group-hover:text-gray-600'
-                  }`} />
+                    }`} />
                   <span className="font-medium">{item.label}</span>
-                  
+
                   {/* Active indicator */}
                   {isActive && (
-                    <div 
+                    <div
                       className="ml-auto w-2 h-2 rounded-full"
-                      style={{ 
+                      style={{
                         backgroundColor: '#FFFFFF'
                       }}
                     />
@@ -191,7 +200,7 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
         {/* Sidebar Footer */}
         <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center space-x-3">
-            <div 
+            <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md"
               style={{
                 background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)'
@@ -212,52 +221,61 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
               <p className="text-xs text-gray-500 truncate">
                 {user?.email || 'admin@academia.com'}
               </p>
-              <p 
+              <p
                 className="text-xs font-medium capitalize mt-0.5"
-                style={{ 
+                style={{
                   color: '#3B82F6'
                 }}
               >
-                {user?.role === 'super_admin' ? 'Super Admin' : 
-                 user?.role === 'admin' ? 'Administrador' : 
-                 user?.role === 'viewer' ? 'Visualizador' :
-                 user?.role || 'Usuário'}
+                {user?.role === 'super_admin' ? 'Super Admin' :
+                  user?.role === 'admin' ? 'Administrador' :
+                    user?.role === 'viewer' ? 'Visualizador' :
+                      user?.role || 'Usuário'}
               </p>
             </div>
+
+            {/* <-- 3. Adicionar o botão de logout aqui */}
+            <button
+              onClick={handleLogout}
+              className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+              title="Sair"
+            >
+              <FaSignOutAlt className="text-lg" />
+            </button>
           </div>
 
           {/* Status da Empresa */}
           {company && (
             <div className="mt-3 pt-3 border-t border-gray-200">
+              {/* ... (Status da empresa não muda) */}
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Plano:</span>
-                <span 
+                <span
                   className="font-medium capitalize px-2 py-1 rounded-full"
                   style={{
                     backgroundColor: '#F3F4F6',
                     color: '#374151'
                   }}
                 >
-                  {company.plan === 'free' ? 'Grátis' : 
-                   company.plan === 'pro' ? 'Profissional' : 
-                   company.plan === 'enterprise' ? 'Enterprise' : 
-                   company.plan}
+                  {company.plan === 'free' ? 'Grátis' :
+                    company.plan === 'pro' ? 'Profissional' :
+                      company.plan === 'enterprise' ? 'Enterprise' :
+                        company.plan}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs mt-1">
                 <span className="text-gray-500">Status:</span>
-                <span 
-                  className={`font-medium px-2 py-1 rounded-full ${
-                    company.status === 'active' 
+                <span
+                  className={`font-medium px-2 py-1 rounded-full ${company.status === 'active'
                       ? 'bg-green-100 text-green-800'
                       : company.status === 'suspended'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
                 >
-                  {company.status === 'active' ? 'Ativo' : 
-                   company.status === 'suspended' ? 'Suspenso' : 
-                   'Cancelado'}
+                  {company.status === 'active' ? 'Ativo' :
+                    company.status === 'suspended' ? 'Suspenso' :
+                              'Cancelado'}
                 </span>
               </div>
             </div>
@@ -267,7 +285,7 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
       {/* Main content overlay for mobile when sidebar is open */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-10 z-30 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
