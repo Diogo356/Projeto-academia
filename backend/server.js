@@ -31,7 +31,17 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // IMPORTANTE para FormData
+
+app.use((req, res, next) => {
+  if (req.originalUrl.startsWith('/api/workouts')) {
+    next(); // Pula express-fileupload
+  } else {
+    fileUpload({
+      limits: { fileSize: 2 * 1024 * 1024 },
+      abortOnLimit: true,
+    })(req, res, next);
+  }
+});
 
 // Conexão com MongoDB
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/academia', {
