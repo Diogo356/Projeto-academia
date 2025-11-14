@@ -1,4 +1,4 @@
-// routes/workout.routes.js
+// CORREÇÃO NO workouts.route.js
 import express from 'express';
 import multer from 'multer';
 import { 
@@ -7,84 +7,88 @@ import {
   createWorkout, 
   updateWorkout, 
   deleteWorkout, 
-  getWorkoutStats,
-  uploadExerciseMedia  // Importar a nova função
+  getWorkoutStats
 } from '../controllers/workout.controller.js';
 import { verifyAccessToken } from '../controllers/auth.controller.js';
 import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
 
-// Configuração do Multer para upload de arquivos
+// Configuração do Multer
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB
-  },
-  fileFilter: (req, file, cb) => {
-    // Verificar tipos de arquivo permitidos
-    const allowedTypes = [
-      'image/gif',
-      'video/mp4',
-      'video/mov',
-      'video/avi',
-      'video/webm',
-      'video/quicktime',
-      'image/webp',
-      'image/jpeg',
-      'image/png'
-    ];
-    
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Tipo de arquivo não suportado'), false);
-    }
+    files: 10 // Máximo 10 arquivos
   }
 });
 
-// Validação mínima
+// Middleware para validação
 const workoutValidation = [
   body('name').notEmpty().withMessage('Nome é obrigatório'),
-  body('exercises').isArray({ min: 1 }).withMessage('Pelo menos 1 exercício'),
-  body('exercises.*.name').notEmpty(),
-  body('exercises.*.duration').isInt({ min: 1 })
+  body('exercises').isArray({ min: 1 }).withMessage('Pelo menos 1 exercício')
 ];
 
-// Middleware para tratar erros do multer
-const handleMulterError = (error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        success: false,
-        message: 'Arquivo muito grande. Tamanho máximo: 10MB'
-      });
+// Middleware para processar FormData com arrays
+const processFormData = (req, res, next) => {
+  // Se há campos de exercícios, processar arrays
+  if (req.body && typeof req.body === 'object') {
+    for (const key in req.body) {
+      if (key.startsWith('exercises[') && key.includes('][targetMuscles]')) {
+        try {
+          const match = key.match(/exercises\[(\d+)\]\[targetMuscles\]/);
+          if (match) {
+            const index = match[1];
+            req.body.exercises = req.body.exercises || [];
+            req.body.exercises[index] = req.body.exercises[index] || {};
+            req.body.exercises[index].targetMuscles = JSON.parse(req.body[key]);
+          }
+        } catch (e) {
+          console.warn('Erro ao parsear targetMuscles:', e);
+        }
+      }
+      if (key.startsWith('exercises[') && key.includes('][tips]')) {
+        try {
+          const match = key.match(/exercises\[(\d+)\]\[tips\]/);
+          if (match) {
+            const index = match[1];
+            req.body.exercises = req.body.exercises || [];
+            req.body.exercises[index] = req.body.exercises[index] || {};
+            req.body.exercises[index].tips = JSON.parse(req.body[key]);
+          }
+        } catch (e) {
+          console.warn('Erro ao parsear tips:', e);
+        }
+      }
     }
-  } else if (error) {
-    return res.status(400).json({
-      success: false,
-      message: error.message
-    });
   }
   next();
 };
 
-// Rota de upload de mídia para exercícios
+// Rotas com upload de arquivos
 router.post(
-  '/upload-exercise-media', 
-  verifyAccessToken,
-  upload.single('media'),
-  handleMulterError,
-  uploadExerciseMedia
+  '/', 
+  verifyAccessToken, 
+  upload.any(),
+  processFormData,
+  workoutValidation,
+  createWorkout
 );
 
-// Rotas de workout
+router.put(
+  '/:publicId', 
+  verifyAccessToken, 
+  upload.any(),
+  processFormData,
+  workoutValidation,
+  updateWorkout
+);
+
+// Rotas sem upload
 router.get('/', verifyAccessToken, getWorkouts);
 router.get('/stats', verifyAccessToken, getWorkoutStats);
 router.get('/:publicId', verifyAccessToken, getWorkoutById);
-router.post('/', verifyAccessToken, workoutValidation, createWorkout);
-router.put('/:publicId', verifyAccessToken, workoutValidation, updateWorkout);
 router.delete('/:publicId', verifyAccessToken, deleteWorkout);
 
 export default router;

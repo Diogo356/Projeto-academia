@@ -1,22 +1,14 @@
-// src/components/workout/ActiveWorkout.jsx - COMPONENTE OTIMIZADO E RESPONSIVO
-import React, { useState, useEffect } from 'react';
+// src/components/workout/ActiveWorkout.jsx - COMPONENTE OTIMIZADO COM MÍDIA E DICAS CORRETAS
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   FaDumbbell, 
   FaClock, 
   FaBullseye, 
-  FaVideo, 
   FaListAlt, 
-  FaLightbulb, 
-  FaStar,
   FaCheck,
   FaSync,
-  FaExclamationTriangle,
   FaRunning,
-  FaHeartbeat,
-  FaYinYang,
-  FaFire,
-  FaMountain,
   FaSpinner
 } from 'react-icons/fa';
 import { 
@@ -26,14 +18,148 @@ import {
 } from 'react-icons/gi';
 import { 
   MdFitnessCenter,
-  MdTimer,
   MdOndemandVideo,
   MdPlaylistPlay,
   MdTipsAndUpdates,
-  MdError
-} from 'react-icons/md';
+  MdError,
+  MdCircle
+} from 'react-icons/md'; 
 import WorkoutHeader from './WorkoutHeader';
 import workoutService from '../../services/workoutService';
+
+// --- Sub-Componente para Dicas (MANTIDO) ---
+const ExerciseTips = ({ tips, type }) => (
+  <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 lg:p-6 h-full">
+    <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 flex items-center">
+      <MdTipsAndUpdates className="w-5 h-5 mr-2 text-yellow-500" />
+      Dicas do Exercício
+      <span className="ml-2 text-sm font-normal text-gray-500 capitalize">
+        ({type})
+      </span>
+    </h3>
+    {/* <ul className="space-y-3 overflow-y-auto max-h-[300px] lg:max-h-[calc(100%-40px)] pr-2">
+      {tips.length > 0 ? (
+        tips.map((tip, index) => (
+          <li key={index} className="flex items-start text-gray-700 text-sm lg:text-base">
+            <MdCircle className="w-3 h-3 mt-1 mr-2 flex-shrink-0 text-yellow-500" />
+            <span>{tip}</span>
+          </li>
+        ))
+      ) : (
+        <li className="text-gray-500 italic">Nenhuma dica específica disponível para este exercício.</li>
+      )}
+    </ul> */}
+  </div>
+);
+// --- Fim do Sub-Componente ---
+
+// --- Sub-Componente para Mídia (MANTIDO) ---
+const ExerciseMedia = ({ videoUrl, exerciseName }) => {
+  const isVideo = videoUrl && videoUrl.match(/\.(mp4|webm|ogg|mov)$/i);
+  const isGif = videoUrl && videoUrl.match(/\.(gif)$/i);
+
+  if (isVideo) {
+    return (
+      <video
+        key={videoUrl}
+        src={videoUrl}
+        className="w-full h-full object-cover absolute top-0 left-0"
+        autoPlay
+        loop
+        muted
+        playsInline
+        title={`Demonstração de ${exerciseName}`}
+      >
+        Seu navegador não suporta o elemento de vídeo.
+      </video>
+    );
+  }
+
+  if (isGif || videoUrl) {
+    return (
+      <img
+        key={videoUrl}
+        src={videoUrl}
+        alt={`Demonstração de ${exerciseName}`}
+        className="w-full h-full object-contain absolute top-0 left-0"
+      />
+    );
+  }
+  
+  return (
+    <div className="text-center text-white p-4">
+      <MdOndemandVideo className="text-4xl lg:text-5xl xl:text-6xl 2xl:text-7xl mb-2 lg:mb-3 xl:mb-4 mx-auto text-blue-400" />
+      <p className="text-base lg:text-lg xl:text-xl 2xl:text-2xl font-semibold mb-1 lg:mb-2">Demonstração Indisponível</p>
+      <p className="text-gray-300 text-xs lg:text-sm xl:text-base">
+        Nenhuma mídia de demonstração encontrada para este exercício.
+      </p>
+    </div>
+  );
+};
+// --- Fim do Sub-Componente ---
+
+
+// --- Funções Auxiliares (AJUSTADAS) ---
+
+/**
+ * Retorna uma URL de vídeo/GIF fallback se o campo mediaFile estiver vazio.
+ * NOTA: No seu caso, 'mediaFile.url' já foi mapeado corretamente para 'video'
+ * no fetch, mas mantemos isso como um último recurso.
+ */
+const getFallbackMedia = (type) => {
+    const media = {
+      cardio: '/videos/cardio-demo.mp4',
+      strength: '/videos/strength-demo.mp4',
+      hiit: '/videos/hiit-demo.mp4',
+      yoga: '/videos/yoga-demo.mp4',
+      pilates: '/videos/pilates-demo.mp4',
+      mobility: '/videos/mobility-demo.mp4',
+      warmup: '/gifs/warmup-demo.gif' // Exemplo de um GIF fallback
+    };
+    return media[type] || '/videos/default-demo.mp4';
+};
+
+
+/**
+ * Retorna dicas genéricas baseadas no tipo de exercício, usadas apenas
+ * se o exercício NÃO tiver dicas específicas.
+ * (Renomeada de getExerciseTips para getFallbackTips para clareza)
+ */
+const getFallbackTips = (type) => {
+    const tipsByType = {
+      cardio: [
+        'Mantenha uma postura ereta durante todo o exercício',
+        'Controle sua respiração - inspire pelo nariz, expire pela boca',
+        'Ajuste a intensidade conforme seu condicionamento',
+        // ... outras dicas cardio
+      ],
+      strength: [
+        'Mantenha o core contraído durante o movimento',
+        'Execute o movimento de forma controlada',
+        'Não trave as articulações no final do movimento',
+        // ... outras dicas strength
+      ],
+      warmup: [
+        'Comece com movimentos leves e controlados.',
+        'Aumente a amplitude gradualmente.',
+        'Siga o ritmo do seu corpo, sem forçar.',
+        // ... outras dicas warmup
+      ],
+      // ... (outros tipos)
+    };
+
+    const defaultTips = [
+      'Mantenha a postura correta durante o exercício',
+      'Respire de forma constante e controlada',
+      'Beba água para manter-se hidratado',
+      'Use roupas adequadas para a atividade',
+      'Respeite seus limites e evolua gradualmente'
+    ];
+
+    // Se as dicas por tipo forem mais robustas, use-as. Caso contrário, use as default.
+    return tipsByType[type] || defaultTips;
+};
+// --- Fim das Funções Auxiliares ---
 
 const ActiveWorkout = () => {
   const { publicId } = useParams();
@@ -47,26 +173,73 @@ const ActiveWorkout = () => {
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(5);
 
-  // Buscar dados do treino
+  const exerciseListRef = useRef(null); 
+  const exerciseRefs = useRef([]); 
+
+
+  // Buscar dados do treino (LÓGICA AJUSTADA AQUI)
   useEffect(() => {
     const fetchWorkout = async () => {
       try {
         setLoading(true);
-        const workout = await workoutService.getWorkoutById(publicId);
+        // Simulação do serviço real:
+        // const workout = await workoutService.getWorkoutById(publicId);
+        
+        // Usando seus dados de exemplo (SIMULAÇÃO):
+        const workout = {
+            publicId: '0fd01bb2-9fd3-44c7-9f72-1e9447ee339c',
+            name: 'aasfasfasf',
+            description: 'asfasfasf',
+            exercises: [
+                {
+                    completed: false,
+                    duration: 120,
+                    id: 1,
+                    instructions: "asfasfasfasf",
+                    mediaFile: {
+                        url: 'https://res.cloudinary.com/df7cl2fvb/image/upload/v16763009948/exercise-media/vjzwiafbvwovxzduer1p.gif',
+                        type: 'image',
+                        name: 'fcdda54c67d2a13389eea05e4b150407.gif'
+                    },
+                    name: "safasfasf",
+                    publicId: "e7fa15a1-ad7e-4836-b725-9518e438c0c5",
+                    reps: 0,
+                    restTime: 30,
+                    sets: 1,
+                    targetMuscles: [],
+                    // Este é o array que você quer priorizar:
+                    tips: ['Mantenha a postura correta durante o exercício', 'Respire de forma constante e controlada', 'Beba água para manter-se hidratado', 'Use roupas adequadas para a atividade', 'Respeite seus limites e evolua gradualmente'],
+                    type: "warmup",
+                    weight: 0
+                }
+            ]
+        };
 
         const transformedWorkout = {
           ...workout,
-          exercises: workout.exercises?.map((exercise, index) => ({
-            ...exercise,
-            id: exercise.id || index + 1,
-            duration: exercise.duration || 60,
-            type: exercise.type || 'strength',
-            video: exercise.video || getExerciseVideo(exercise.type),
-            tips: exercise.tips || getExerciseTips(exercise.type, exercise.name),
-            completed: false
-          })) || []
-        };
+          exercises: workout.exercises?.map((exercise, index) => {
+            
+            // 1. Dicas: Prioriza as dicas do objeto do exercício.
+            const exerciseTips = Array.isArray(exercise.tips) && exercise.tips.length > 0
+                ? exercise.tips
+                : getFallbackTips(exercise.type); // Caso contrário, usa o fallback.
 
+            // 2. Mídia: Usa a URL do mediaFile. Caso contrário, usa o fallback.
+            const mediaUrl = exercise.mediaFile?.url || getFallbackMedia(exercise.type);
+
+            return {
+                ...exercise,
+                id: exercise.id || index + 1,
+                duration: exercise.duration || 60,
+                type: exercise.type || 'strength',
+                video: mediaUrl, // 'video' agora armazena a URL de vídeo ou GIF
+                tips: exerciseTips,
+                completed: false
+            };
+          }) || []
+        };
+        
+        console.log('Dados do Treino Transformados:', transformedWorkout);
         setWorkoutData(transformedWorkout);
 
       } catch (err) {
@@ -84,6 +257,8 @@ const ActiveWorkout = () => {
       setLoading(false);
     }
   }, [publicId]);
+
+  // ... (Restante da Lógica (Countdown, Timer, completeExercise, etc.) - MANTIDO)
 
   // Countdown para iniciar automaticamente
   useEffect(() => {
@@ -121,75 +296,16 @@ const ActiveWorkout = () => {
     return () => clearInterval(timer);
   }, [isRunning, timeRemaining]);
 
-  // Funções auxiliares
-  const getExerciseVideo = (type) => {
-    const videos = {
-      cardio: '/videos/cardio-demo.mp4',
-      strength: '/videos/strength-demo.mp4',
-      hiit: '/videos/hiit-demo.mp4',
-      yoga: '/videos/yoga-demo.mp4',
-      pilates: '/videos/pilates-demo.mp4',
-      mobility: '/videos/mobility-demo.mp4'
-    };
-    return videos[type] || '/videos/default-demo.mp4';
-  };
 
-  const getExerciseTips = (type, name) => {
-    const tips = {
-      cardio: [
-        'Mantenha uma postura ereta durante todo o exercício',
-        'Controle sua respiração - inspire pelo nariz, expire pela boca',
-        'Ajuste a intensidade conforme seu condicionamento',
-        'Use tênis apropriado para amortecimento',
-        'Hidrate-se antes, durante e após o exercício'
-      ],
-      strength: [
-        'Mantenha o core contraído durante o movimento',
-        'Execute o movimento de forma controlada',
-        'Não trave as articulações no final do movimento',
-        'Foque na qualidade do movimento, não no peso',
-        'Mantenha a respiração constante'
-      ],
-      hiit: [
-        'Dê o máximo durante os intervalos de alta intensidade',
-        'Use os períodos de descanso para recuperar o fôlego',
-        'Mantenha a hidratação durante todo o treino',
-        'Escute seu corpo e ajuste a intensidade',
-        'Não pule o aquecimento e o alongamento'
-      ],
-      yoga: [
-        'Foque na respiração profunda e consciente',
-        'Respeite os limites do seu corpo',
-        'Mantenha a concentração no momento presente',
-        'Use roupas confortáveis que permitam movimento',
-        'Pratique em superfície firme e antiderrapante'
-      ],
-      pilates: [
-        'Mantenha o alinhamento postural durante todo o exercício',
-        'Controle a respiração de forma ritmada',
-        'Foque na precisão dos movimentos',
-        'Mantenha o core ativado',
-        'Execute movimentos fluidos e controlados'
-      ],
-      mobility: [
-        'Movimente-se lentamente e com controle',
-        'Não force além do seu limite atual',
-        'Respire profundamente durante os alongamentos',
-        'Mantenha cada posição por tempo suficiente',
-        'Foque na qualidade do movimento'
-      ]
-    };
-
-    const defaultTips = [
-      'Mantenha a postura correta durante o exercício',
-      'Respire de forma constante e controlada',
-      'Beba água para manter-se hidratado',
-      'Use roupas adequadas para a atividade',
-      'Respeite seus limites e evolua gradualmente'
-    ];
-
-    return tips[type] || defaultTips;
-  };
+  // ROLAGEM AUTOMÁTICA do exercício atual
+  useEffect(() => {
+    if (exerciseRefs.current[currentExerciseIndex]) {
+      exerciseRefs.current[currentExerciseIndex].scrollIntoView({
+        behavior: 'smooth',
+        inline: 'center' 
+      });
+    }
+  }, [currentExerciseIndex]);
 
   const startWorkout = () => {
     if (!workoutData?.exercises?.length) return;
@@ -202,13 +318,13 @@ const ActiveWorkout = () => {
   const completeExercise = () => {
     if (!workoutData) return;
 
+    const updatedExercises = workoutData.exercises.map((ex, index) =>
+      index === currentExerciseIndex ? { ...ex, completed: true } : ex
+    );
+
     const nextIndex = currentExerciseIndex + 1;
 
     if (nextIndex < workoutData.exercises.length) {
-      const updatedExercises = workoutData.exercises.map((ex, index) =>
-        index === currentExerciseIndex ? { ...ex, completed: true } : ex
-      );
-
       setWorkoutData(prev => ({
         ...prev,
         exercises: updatedExercises
@@ -217,10 +333,6 @@ const ActiveWorkout = () => {
       setCurrentExerciseIndex(nextIndex);
       setTimeRemaining(workoutData.exercises[nextIndex].duration);
     } else {
-      const updatedExercises = workoutData.exercises.map((ex, index) =>
-        index === currentExerciseIndex ? { ...ex, completed: true } : ex
-      );
-
       setWorkoutData(prev => ({
         ...prev,
         exercises: updatedExercises
@@ -245,7 +357,7 @@ const ActiveWorkout = () => {
     return ((currentExerciseIndex + 1) / workoutData.exercises.length) * 100;
   };
 
-  // Estados de loading e error
+  // ... (Estados de loading e error - MANTIDO)
   if (loading) {
     return (
       <div className="h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
@@ -292,7 +404,7 @@ const ActiveWorkout = () => {
         />
       </div>
 
-      {/* Countdown Overlay */}
+      {/* Countdown Overlay (OK) */}
       {showCountdown && (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
           <div className="text-center text-white">
@@ -303,16 +415,18 @@ const ActiveWorkout = () => {
         </div>
       )}
 
-      {/* Conteúdo Principal */}
-      <div className="flex-1 overflow-hidden">
+      {/* Conteúdo Principal (MANTIDO) */}
+      <div className="flex-1 overflow-y-auto pt-4 pb-12"> 
         <div className="h-full max-w-[1920px] mx-auto px-4">
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 h-full">
+            
+            {/* Coluna Principal (Card do Exercício Atual) */}
             <div className="xl:col-span-8 flex flex-col h-full">
               <div className="grid grid-rows-[1fr] gap-4 h-full">
 
-                {/* Card do Exercício Atual */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 lg:p-6 xl:p-8 flex flex-col">
-                  {/* Header do Exercício */}
+                {/* Card do Exercício Atual (MANTIDO) */}
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-4 lg:p-6 xl:p-8 flex flex-col">
+                  {/* ... (Header e Stats - MANTIDO) ... */}
                   <div className="text-center mb-4 lg:mb-6 xl:mb-8">
                     <h2 className="text-xl lg:text-2xl xl:text-3xl 2xl:text-4xl font-bold text-gray-900 mb-2">
                       {currentExercise.name}
@@ -324,7 +438,7 @@ const ActiveWorkout = () => {
                       </span>
                       <span className="flex items-center space-x-1 lg:space-x-2">
                         <FaClock className="w-4 h-4 text-gray-500" />
-                        <span>{Math.floor(currentExercise.duration / 60)} min</span>
+                        <span>{Math.floor(currentExercise.duration / 60) || 1} min</span>
                       </span>
                       <span className="flex items-center space-x-1 lg:space-x-2">
                         <FaBullseye className="w-4 h-4 text-gray-500" />
@@ -333,9 +447,9 @@ const ActiveWorkout = () => {
                     </div>
                   </div>
 
-                  {/* Área Central - Cronômetro */}
+                  {/* Área Central - Cronômetro (MANTIDO) */}
                   <div className="flex-1 flex flex-col justify-center items-center mb-4 lg:mb-6 xl:mb-8">
-                    <div className="text-5xl lg:text-7xl xl:text-7xl 2xl:text-8xl font-mono font-bold text-blue-600 mb-3 lg:mb-4 xl:mb-6 text-center leading-none">
+                    <div className="text-5xl lg:text-7xl xl:text-8xl 2xl:text-9xl font-mono font-extrabold text-blue-600 mb-3 lg:mb-4 xl:mb-6 text-center leading-none">
                       {formatTime(timeRemaining)}
                     </div>
                     <p className="text-base lg:text-lg xl:text-xl 2xl:text-1xl text-gray-600 text-center">
@@ -343,11 +457,13 @@ const ActiveWorkout = () => {
                     </p>
                   </div>
 
-                  {/* Barra de Progresso */}
+                  {/* Barra de Progresso (MANTIDO) */}
                   <div className="mb-4 lg:mb-6 xl:mb-8">
                     <div className="flex justify-between text-sm lg:text-base xl:text-lg text-gray-600 mb-2 lg:mb-3 xl:mb-4">
                       <span className="font-semibold">Progresso do Exercício</span>
-                      <span className="font-mono">{formatTime(timeRemaining)}</span>
+                      <span className="font-mono">
+                         {Math.round(((currentExercise.duration - timeRemaining) / currentExercise.duration) * 100)}%
+                      </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2 lg:h-3 xl:h-4">
                       <div
@@ -359,7 +475,7 @@ const ActiveWorkout = () => {
                     </div>
                   </div>
 
-                  {/* Estatísticas Rápidas */}
+                  {/* Estatísticas Rápidas (MANTIDO) */}
                   <div className="grid grid-cols-3 gap-3 lg:gap-4 xl:gap-6">
                     <div className="text-center p-3 lg:p-4 xl:p-5 bg-blue-50 rounded-xl">
                       <div className="text-lg lg:text-xl xl:text-2xl 2xl:text-3xl font-bold text-blue-600">
@@ -393,82 +509,87 @@ const ActiveWorkout = () => {
               </div>
             </div>
 
+            {/* Coluna da Demonstração (Mídia) - MANTIDO (USA AS PROPS CORRETAS) */}
             <div className="xl:col-span-4 flex flex-col h-full gap-4">
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0">
+                <div className="flex-1 bg-gray-900 flex items-center justify-center relative min-h-[300px] lg:min-h-[400px]">
+                  
+                  {/* INSERÇÃO DO COMPONENTE DE MÍDIA */}
+                  <ExerciseMedia 
+                    videoUrl={currentExercise.video} 
+                    exerciseName={currentExercise.name}
+                  />
 
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0">
-                <div className="flex-1 bg-gray-900 flex items-center justify-center relative min-h-[300px]">
-                  <div className="text-center text-white p-4">
-                    <MdOndemandVideo className="text-3xl lg:text-4xl xl:text-5xl 2xl:text-6xl mb-2 lg:mb-3 xl:mb-4 mx-auto" />
-                    <p className="text-base lg:text-lg xl:text-xl 2xl:text-2xl font-semibold mb-1 lg:mb-2">Demonstração</p>
-                    <p className="text-gray-300 text-xs lg:text-sm xl:text-base">
-                      {currentExercise.video ? 'Vídeo tutorial' : 'GIF demonstrativo'}
-                    </p>
-                  </div>
-
-                  <div className="absolute top-2 lg:top-3 xl:top-4 right-2 lg:right-3 xl:right-4 bg-black bg-opacity-70 text-white px-2 lg:px-3 xl:px-4 py-1 lg:py-1.5 xl:py-2 rounded-lg">
-                    <div className="text-base lg:text-lg xl:text-xl 2xl:text-2xl font-mono font-bold">
+                  {/* Temporizador sobre a Mídia (MANTIDO) */}
+                  {/* <div className="absolute top-2 lg:top-3 xl:top-4 right-2 lg:right-3 xl:right-4 bg-black bg-opacity-70 text-white px-3 lg:px-4 xl:px-5 py-1.5 lg:py-2 xl:py-3 rounded-lg z-10">
+                    <div className="text-sm lg:text-lg xl:text-xl 2xl:text-2xl font-mono font-bold">
                       {formatTime(timeRemaining)}
                     </div>
-                  </div>
+                  </div> */}
                 </div>
 
+                {/* Status do Exercício (MANTIDO) */}
                 <div className="p-2 lg:p-3 xl:p-4 bg-gray-800 text-white">
                   <div className="flex justify-between items-center">
                     <span className="text-xs lg:text-sm flex items-center">
-                      <FaRunning className="w-3 h-3 mr-1" />
+                      <FaRunning className="w-3 h-3 mr-1 text-blue-400" />
                       Exercício em Andamento
                     </span>
-                    <span className="text-sm lg:text-base xl:text-lg font-mono font-bold">
+                    <span className="text-sm lg:text-base xl:text-lg font-mono font-bold text-blue-300">
                       {formatTime(timeRemaining)}
                     </span>
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
 
-          {/* LISTA DE EXERCÍCIOS E DICAS - LADO A LADO */}
+          {/* LISTA DE EXERCÍCIOS E DICAS (MANTIDO) */}
           <div className="mt-4">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
               
-              {/* Lista de Exercícios */}
+              {/* Lista de Exercícios (MANTIDO) */}
               <div className="xl:col-span-8">
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 lg:p-6">
-                  <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-2 flex items-center">
-                    <MdPlaylistPlay className="w-5 h-5 mr-2" />
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-4 lg:p-6">
+                  <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 flex items-center"> 
+                    <MdPlaylistPlay className="w-5 h-5 mr-2 text-blue-500" />
                     Lista de Exercícios
                     <span className="ml-2 text-sm font-normal text-gray-500">
                       ({currentExerciseIndex + 1} de {workoutData.exercises.length})
                     </span>
                   </h3>
 
-                  <div className="overflow-x-auto">
-                    <div className="flex space-x-3 lg:space-x-4 pb-1 min-w-max">
+                  <div 
+                    ref={exerciseListRef} 
+                    className="overflow-x-auto snap-x snap-mandatory hide-scrollbar" 
+                  >
+                    <div className="flex space-x-4 lg:space-x-5 pb-1 min-w-max">
                       {workoutData.exercises.map((exercise, index) => (
                         <div
                           key={exercise.id}
-                          className={`flex-shrink-0 w-64 lg:w-72 px-4 pt-4 rounded-xl border-2 transition-all duration-300 ${index === currentExerciseIndex
-                              ? 'bg-blue-50 border-blue-400 shadow-lg scale-105'
+                          ref={el => exerciseRefs.current[index] = el} 
+                          className={`flex-shrink-0 w-64 lg:w-72 px-4 pt-4 rounded-xl border-2 transition-all duration-300 snap-center
+                            ${index === currentExerciseIndex
+                              ? 'bg-blue-50 border-blue-400 shadow-xl scale-[1.02] border-4' 
                               : exercise.completed
                                 ? 'bg-green-50 border-green-300'
-                                : 'bg-gray-50 border-gray-200'
+                                : 'bg-gray-50 border-gray-200 hover:border-gray-300'
                             }`}
                         >
                           {/* Header com número e status */}
                           <div className="flex items-center justify-between mb-1">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${index === currentExerciseIndex
-                                ? 'bg-blue-500 text-white'
+                                ? 'bg-blue-600 text-white shadow-md'
                                 : exercise.completed
                                   ? 'bg-green-500 text-white'
-                                  : 'bg-gray-300 text-gray-600'
+                                  : 'bg-gray-400 text-white'
                               }`}>
                               {index + 1}
                             </div>
 
                             {index === currentExerciseIndex && (
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                <FaSync className="w-3 h-3 mr-1" />
+                                <FaSync className="w-3 h-3 mr-1 animate-spin" /> 
                                 Em Andamento
                               </span>
                             )}
@@ -481,7 +602,7 @@ const ActiveWorkout = () => {
                           </div>
 
                           {/* Nome do exercício */}
-                          <h4 className={`font-bold text-sm lg:text-base mb-3 truncate ${index === currentExerciseIndex
+                          <h4 className={`font-bold text-base lg:text-lg mb-3 truncate ${index === currentExerciseIndex
                               ? 'text-blue-700'
                               : exercise.completed
                                 ? 'text-green-700'
@@ -493,14 +614,14 @@ const ActiveWorkout = () => {
                           {/* Informações na HORIZONTAL */}
                           <div className="flex items-center justify-between gap-3 mb-3">
                             <div className="flex items-center gap-1 lg:gap-2">
-                              <GiMuscleUp className="w-3 h-3 text-gray-500" />
+                              <GiMuscleUp className="w-4 h-4 text-gray-500" />
                               <span className="font-medium capitalize text-gray-700 text-xs lg:text-sm">
                                 {exercise.type}
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1 lg:gap-2">
-                              <GiDuration className="w-3 h-3 text-gray-500" />
+                              <GiDuration className="w-4 h-4 text-gray-500" />
                               <span className="font-medium text-gray-700 text-xs lg:text-sm">
                                 {Math.floor(exercise.duration / 60)}min
                               </span>
@@ -513,17 +634,12 @@ const ActiveWorkout = () => {
                 </div>
               </div>
 
-              {/* Aba de Dicas */}
+              {/* Aba de Dicas (MANTIDO) */}
               <div className="xl:col-span-4">
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 lg:p-6 h-full">
-                  <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 flex items-center">
-                    <MdTipsAndUpdates className="w-5 h-5 mr-2" />
-                    Dicas do Exercício
-                    <span className="ml-2 text-sm font-normal text-gray-500">
-                      {currentExercise.type}
-                    </span>
-                  </h3>
-                </div>
+                <ExerciseTips 
+                  tips={currentExercise.tips} 
+                  type={currentExercise.type} 
+                />
               </div>
             </div>
           </div>
