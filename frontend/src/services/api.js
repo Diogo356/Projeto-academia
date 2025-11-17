@@ -1,6 +1,11 @@
 import axios from 'axios';
 import AuthService from './authService';
 
+// NOTA: Tive que importar o AuthService de forma "lazy" (tardia)
+// para evitar um "loop de dependência" (api -> authService -> api)
+// Esta é uma prática comum com interceptors.
+const getAuthService = () => AuthService;
+
 const API_BASE_URL = 'http://localhost:5001/api';
 
 const api = axios.create({
@@ -31,10 +36,13 @@ api.interceptors.response.use(
     // 2. Ainda não tentamos (sem _retry)
     // 3. A rota que falhou NÃO é a de refresh-token (evita loop)
     // 4. A rota que falhou NÃO é a verificação inicial de auth (que tem a flag _isInitialAuthCheck)
+    // 5. ❗️A ROTA QUE FALHOU NÃO É O LOGIN NEM O REGISTRO❗️
     if (
       error.response.status === 401 &&
       !originalRequest._retry &&
       originalRequest.url !== '/auth/refresh-token' &&
+      originalRequest.url !== '/auth/login' &&         // ⬅️ ADICIONADO
+      originalRequest.url !== '/auth/register' &&     // ⬅️ ADICIONADO (Boa prática)
       !originalRequest._isInitialAuthCheck
     ) {
       
@@ -51,8 +59,8 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Usa o 'AuthService.refreshToken()' que você já tem
-        await AuthService.refreshToken(); 
+        // Usa o getAuthService() para evitar o loop de importação
+        await getAuthService().refreshToken(); 
         processQueue(null);
         return api(originalRequest); // Tenta a requisição original de novo
       } catch (refreshError) {
@@ -65,7 +73,9 @@ api.interceptors.response.use(
 
     // Para todos os outros erros (ou 401s que não devem dar refresh), apenas rejeita
     const message = error.response?.data?.message || 'Erro de conexão';
-    return Promise.reject(new Error(message));
+    // ⭐️ MUDANÇA 2: Retorna o erro completo, não só a mensagem
+    // Isso permite que o authService.js verifique o 'status'
+    return Promise.reject(error);
   }
 );
 

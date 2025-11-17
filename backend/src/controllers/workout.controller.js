@@ -179,15 +179,6 @@ export const createWorkout = async (req, res) => {
     const { companyPublicId, publicId: userPublicId } = req.user;
     const { name, description, exercises } = req.body;
 
-    console.log('📝 Dados recebidos para criar treino:', {
-      name,
-      description,
-      exercisesCount: exercises?.length,
-      filesCount: req.files?.length || 0,
-      companyPublicId,
-      userPublicId
-    });
-
     // Processar exercícios
     const processedExercises = await Promise.all(
       exercises.map(async (exercise, index) => {
@@ -200,9 +191,6 @@ export const createWorkout = async (req, res) => {
           
           if (file) {
             try {
-              console.log(`📁 Processando arquivo para exercício ${index}:`, file.originalname);
-
-              // Fazer upload para Cloudinary
               const uploadResult = await uploadExerciseMediaToCloudinary(
                 file.buffer,
                 file.originalname
@@ -220,8 +208,6 @@ export const createWorkout = async (req, res) => {
                 height: uploadResult.height,
                 ...(isVideo && { duration: uploadResult.duration })
               };
-
-              console.log(`✅ Mídia do exercício ${index} uploadada:`, file.originalname);
             } catch (uploadError) {
               console.error(`❌ Erro no upload da mídia do exercício ${index}:`, uploadError);
             }
@@ -254,11 +240,8 @@ export const createWorkout = async (req, res) => {
       createdByPublicId: userPublicId
     });
 
-    console.log('💾 Salvando workout no banco...');
     await workout.save();
-
-    console.log('✅ Treino criado com sucesso! ID:', workout.publicId);
-
+    
     res.status(201).json({
       success: true,
       message: 'Treino criado com sucesso!',

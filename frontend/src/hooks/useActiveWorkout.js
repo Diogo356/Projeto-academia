@@ -58,8 +58,6 @@ export const useActiveWorkout = (publicId) => {
             };
           }),
         };
-        
-        console.log('Dados do Treino Transformados:', transformedWorkout);
         setWorkoutData(transformedWorkout);
         // Define o tempo do primeiro exercício
         setTimeRemaining(transformedWorkout.exercises[0].duration);

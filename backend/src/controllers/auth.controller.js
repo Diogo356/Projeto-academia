@@ -117,22 +117,17 @@ export const loginCompany = async (req, res) => {
     const { email, password } = req.body;
     const deviceInfo = { userAgent: req.get('User-Agent'), ip: req.ip };
 
-    console.log('🔐 Tentativa de login:', email);
-
     // Buscar usuário pelo email (não mais pela company)
     const user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
-      console.log('❌ Usuário não encontrado:', email);
       return res.status(401).json({ success: false, message: 'Credenciais inválidas' });
     }
 
     // Verificar senha
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      console.log('❌ Senha inválida para:', email);
       
-      // Incrementar tentativas de login
       await user.incrementLoginAttempts();
       
       return res.status(401).json({ success: false, message: 'Credenciais inválidas' });
@@ -140,20 +135,14 @@ export const loginCompany = async (req, res) => {
 
     // Verificar se conta está bloqueada
     if (user.isLocked) {
-      console.log('❌ Conta bloqueada:', email);
       return res.status(423).json({ success: false, message: 'Conta bloqueada' });
     }
 
     // Buscar empresa do usuário
     const company = await Company.findOne({ publicId: user.companyPublicId });
     if (!company) {
-      console.log('❌ Empresa não encontrada para usuário:', email);
       return res.status(401).json({ success: false, message: 'Empresa não encontrada' });
     }
-
-    console.log('✅ Credenciais válidas para:', email, 'Role:', user.role);
-
-    // Gerar tokens
     const { accessToken, refreshToken, refreshTokenJWT } = generateTokens(user, company);
     
     // Adicionar refresh token

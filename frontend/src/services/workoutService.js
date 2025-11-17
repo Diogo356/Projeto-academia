@@ -54,13 +54,6 @@ const workoutService = {
         try {
             const formData = new FormData();
 
-            console.log('📤 Preparando dados para criar treino:', {
-                name: workoutData.name,
-                exercisesCount: workoutData.exercises?.length,
-                hasMediaFiles: workoutData.exercises?.some(ex => ex.mediaFile?.file)
-            });
-
-            // Adicionar campos básicos
             formData.append('name', workoutData.name?.trim() || '');
             formData.append('description', workoutData.description?.trim() || '');
 
@@ -88,7 +81,6 @@ const workoutService = {
 
                 // Adicionar arquivo de mídia se existir
                 if (exercise.mediaFile?.file) {
-                    console.log(`📁 Adicionando arquivo para exercício ${index}:`, exercise.mediaFile.file.name);
                     formData.append(`exercises[${index}][mediaFile]`, exercise.mediaFile.file);
                 }
             });
@@ -102,28 +94,15 @@ const workoutService = {
                 throw new Error('Pelo menos um exercício é obrigatório');
             }
 
-            console.log('🚀 Enviando FormData para API...');
-
-            // DEBUG: Verificar o que está sendo enviado
-            for (let [key, value] of formData.entries()) {
-                if (value instanceof File) {
-                    console.log(`📦 FormData: ${key} = File: ${value.name} (${value.type}, ${value.size} bytes)`);
-                } else {
-                    console.log(`📦 FormData: ${key} =`, value);
-                }
-            }
 
             const result = await api.post('/workouts', formData, {
                 timeout: 120000,
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total) {
                         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                        console.log(`📊 Progresso do upload: ${percentCompleted}%`);
                     }
                 }
             });
-
-            console.log('✅ Treino criado com sucesso:', result);
 
             if (result && typeof result === 'object') {
                 if (result.success === false) {
@@ -152,11 +131,6 @@ const workoutService = {
             // Criar FormData para update também
             const formData = new FormData();
 
-            console.log('📤 Preparando dados para atualizar treino:', {
-                publicId,
-                name: workoutData.name,
-                exercisesCount: workoutData.exercises?.length
-            });
 
             // Adicionar campos básicos
             formData.append('name', workoutData.name?.trim() || '');
@@ -195,7 +169,6 @@ const workoutService = {
 
                 // Adicionar arquivo de mídia se existir
                 if (exercise.mediaFile?.file) {
-                    console.log(`📁 Adicionando arquivo para exercício ${index}:`, exercise.mediaFile.file.name);
                     formData.append(`exercises[${index}][mediaFile]`, exercise.mediaFile.file);
                 }
             });
@@ -205,7 +178,6 @@ const workoutService = {
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total) {
                         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                        console.log(`📊 Progresso do upload: ${percentCompleted}%`);
                     }
                 }
             });

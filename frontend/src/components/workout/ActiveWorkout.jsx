@@ -191,8 +191,6 @@ const ActiveWorkout = () => {
             };
           }) || []
         };
-
-        console.log('Dados do Treino Transformados:', transformedWorkout);
         setWorkoutData(transformedWorkout);
         setTimeRemaining(transformedWorkout.exercises[0].duration);
 
